@@ -1,5 +1,6 @@
 from bot.utils import logger
 import os
+from dotenv import load_dotenv
 
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 
@@ -17,6 +18,8 @@ def main():
     """
     # 获取 Telegram Bot Token
     # 创建 Application
+    load_dotenv()
+    token = os.getenv("BOT_TOKEN")
     application = ApplicationBuilder().token(token).build()
 
     # 添加命令处理器

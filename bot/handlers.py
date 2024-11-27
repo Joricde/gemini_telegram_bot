@@ -1,6 +1,5 @@
-import logging
 import os
-
+from utils import logger
 from telegram import Update, ForceReply
 from telegram.ext import ContextTypes, MessageHandler, filters
 
@@ -11,8 +10,6 @@ from bot.gemini import (
     generate_text,
 )
 
-# 获取 logger
-logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """

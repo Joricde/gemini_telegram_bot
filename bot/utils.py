@@ -11,6 +11,7 @@ logging.basicConfig(
     filename=os.path.join(log_dir, "bot.log"),  # 日志文件路径
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.WARNING,  # 将 WARNING 及以上级别日志输出到文件
+    encoding='utf-8'
 )
 
 # 获取 logger
