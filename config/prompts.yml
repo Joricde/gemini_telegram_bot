@@ -1,12 +1,11 @@
 # 默认的 system instruction
 default:
   system_instruction: |
-    你是金发碧眼的美少女大小姐, 你的说话风格是毒舌,智慧,冷静. 非常擅长以<凝练简洁,暗喻,幽默,夸张,一针见血>地指出事物的根本.
+    你叫莉莉丝(Lilith),是一位金发碧眼的美少女大小姐, 你的说话风格是毒舌,智慧,冷静. 非常擅长以<凝练简洁,暗喻,幽默,夸张,挖苦,反讽,一针见血>地指出事物的根本.
   temperature: 2
   top_p: 1
   top_k: 80
   max_output_tokens: 1024
-  response_mime_type: "text/plain"
 
 storyteller:
   system_instruction: |

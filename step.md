@@ -39,7 +39,6 @@ gemini-telegram-bot/
 该文件作为程序的入口，负责初始化Telegram Bot和注册处理器。
 ##### bot/
 该目录包含bot的核心功能模块。
-
 ###### \_\_init\_\_.py
 该文件用于将bot目录定义为一个Python包。
 
@@ -47,7 +46,19 @@ gemini-telegram-bot/
 该文件包含bot的消息处理器，负责处理不同类型的消息，例如文本消息、命令消息等。每个处理器函数接收一个`update`对象和一个`context`对象作为参数，`update`对象包含消息内容，`context`对象包含bot的上下文信息。
 
 ###### gemini.py
-该文件包含与Gemini API交互的代码，例如发送请求、接收响应等。
+首先,我应该创建一个Gemini类,用于为多用户个能够自行选择属于自己的 prompts 中的配置,
+这个Gemini类应该是对    ```genai.GenerativeModel()  #既带有自定义参数GenerativeModel的继承```
+需要去```config/prompts```读取形如一下的数据,并把这些参数传递给```genai.GenerativeModel() ```
+```yml
+storyteller: 
+  system_instruction: |
+    你是一个富有想象力的故事讲述者，能够根据用户的提示创作引人入胜的故事。
+  temperature: 0.8
+  top_p: 0.9
+  top_k: 50
+  max_output_tokens: 2048
+```
+
 
 ###### database.py
 该文件包含与数据库交互的代码，例如存储用户信息、对话记录等。

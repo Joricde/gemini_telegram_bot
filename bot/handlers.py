@@ -3,13 +3,6 @@ from utils import logger
 from telegram import Update, ForceReply
 from telegram.ext import ContextTypes, MessageHandler, filters
 
-from bot.gemini import (
-    get_available_models,
-    set_current_model,
-    get_current_model,
-    generate_text,
-)
-
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """

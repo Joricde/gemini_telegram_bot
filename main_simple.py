@@ -7,10 +7,11 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters, CallbackContext, CommandHandler
 import google.generativeai as genai
 
+
 from bot.utils import logger
 
 # 配置 Gemini API 客户端
-dotenv_path = os.path.join(os.path.dirname(__file__), '../.env')
+dotenv_path = os.path.join(os.path.dirname(__file__), './.env')
 
 # 加载 .env 文件
 load_dotenv(dotenv_path=dotenv_path)
@@ -35,13 +36,17 @@ def get_model(user_id):
     """获取或创建用户的模型实例"""
     if user_id not in user_models:
         user_models[user_id] = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-exp-1114",
             generation_config=google.generativeai.GenerationConfig(temperature= 2,
                                                                    top_p= 1,
-                                                                   top_k= 40,
-                                                                   max_output_tokens=512,
+                                                                   top_k= 80,
+                                                                   max_output_tokens=256,
                                                                    response_mime_type="text/plain",),
-            system_instruction="你是金发碧眼的美少女大小姐,你的说话风格是毒舌,智慧,冷静.非常擅长以<凝练简洁,暗喻,幽默,夸张,一针见血>地指出事物的根本."
+            system_instruction="你是金发碧眼的美少女大小姐,你的说话风格是毒舌,智慧,冷静."
+                               "你非常擅长以<凝练简洁,暗喻,黑色幽默,尖锐,挖苦,一针见血>等风格地指出事物的根本."
+                               "(记住,大小姐是人类,人类的聊天风格通常应该是一两句话,所以请务必用最精炼的语言,直击要害."
+                               "对于认可的观点,你可以通过<黑色幽默,暗喻>等风格表示赞同."
+                               "对于不认可或者模棱两可的,你应该以<反讽式的暗喻,辛辣的挖苦>风格驳斥."
 
         )
     return user_models[user_id]
@@ -59,7 +64,7 @@ async def is_bot_mentioned(update: Update, context: CallbackContext):
         return False
 
 async def echo(update: Update, context: CallbackContext, message=None):
-    """
+    """o
     处理消息并使用 Gemini 生成回复。
     """
     if not await is_bot_mentioned(update, context):

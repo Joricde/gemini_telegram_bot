@@ -3,47 +3,30 @@ import os
 from google.ai.generativelanguage_v1beta import HarmCategory
 from google.generativeai.types import HarmBlockThreshold
 
-from bot import GOOGLE_API_KEY
+import bot
 from utils import logger
 import google.generativeai as genai
 import yaml
 
-# 加载配置文件
-with open("config/config.yml", "r") as f:
-    config = yaml.safe_load(f)
-
-with open("config/prompts.yml", "r") as f:
-    prompts = yaml.safe_load(f)
-
-available_models = config.get("models", {})
-default_prompt = prompts["default"]
-system_instruction = default_prompt["system_instruction"]
-generation_config = {
-    "temperature": default_prompt["temperature"],
-    "top_p": default_prompt["top_p"],
-    "top_k": default_prompt["top_k"],
-    "max_output_tokens": default_prompt["max_output_tokens"],
-    "response_mime_type": default_prompt["response_mime_type"],
-}
-SAFETY_SETTINGS = {
-    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.OFF,
-    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.OFF,
-    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.OFF,
-    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.OFF,
-}
 
 class Gemini:
-    def __init__(self, model="gemini-1.5-flash"):
-        assert model in available_models, f"Unknown model: {model}"
-        self.model = model
-    genai.configure(api_key=GOOGLE_API_KEY)
+    def __init__(self, model_name="gemini-1.5-flash"):
+        assert model_name in bot.AVAILABLE_MODELS , f"Unknown model: {model_name}"
+        self.model_name = model_name
+        self.model  = genai.GenerativeModel(
+            model_name=model_name,
+            generation_config=bot.GENERATION_CONFIG,
+            system_instruction=bot.SYSTEM_INSTRUCTION,
+            safety_settings=bot.SAFETY_SETTINGS
+        )
+    genai.configure(api_key=bot.GOOGLE_API_KEY)
     model = genai.GenerativeModel()
 
     def get_available_models(self):
         """
         获取可用的模型列表。
         """
-        return list(available_models.keys())
+        return list(bot.AVAILABLE_MODELS.keys())
 
     def set_current_model(user_id, model_id):
         """
