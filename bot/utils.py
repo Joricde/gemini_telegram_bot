@@ -2,34 +2,33 @@ import logging
 import os
 
 # 创建日志目录
-log_dir = "logs"  # 日志目录名称
+log_dir = "logs"
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 
 # 配置日志
 logging.basicConfig(
-    filename=os.path.join(log_dir, "bot.log"),  # 日志文件路径
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.WARNING,  # 将 WARNING 及以上级别日志输出到文件
-    encoding='utf-8'
+    filename=os.path.join(log_dir, "bot.log"),
+    format='%(asctime)s - %(levelname)s - %(filename)s - %(lineno)d - %(message)s',
+    encoding='utf-8'  # 移除 level 参数
 )
 
 # 获取 logger
-logger = logging.getLogger("gemini_telegram_bot")  # 使用项目名称作为 logger 名称
-logger.setLevel(logging.INFO)  # 设置 logger 级别为 INFO
+logger = logging.getLogger("gemini_telegram_bot")
+logger.setLevel(logging.DEBUG)
 
-# 创建处理器，仅处理 INFO 级别的日志
+# 创建处理器
 handler = logging.StreamHandler()
-handler.setLevel(logging.INFO)
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+handler.setLevel(logging.INFO)  # 将 StreamHandler 的级别设置为 INFO
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(filename)s - %(lineno)d - %(message)s')
 handler.setFormatter(formatter)
 
 # 添加过滤器，仅打印项目中的日志
 class MyFilter(logging.Filter):
     def filter(self, record):
-        return record.name.startswith("gemini_telegram_bot")  # 仅打印以项目名称开头的日志
+        return record.name.startswith("gemini_telegram_bot")
 
-handler.addFilter(MyFilter())
+# handler.addFilter(MyFilter())  # 根据需要使用或移除过滤器
 
 # 将处理器添加到 logger
 logger.addHandler(handler)

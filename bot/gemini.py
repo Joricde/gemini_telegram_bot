@@ -22,13 +22,14 @@ class Gemini:
     genai.configure(api_key=bot.GOOGLE_API_KEY)
     model = genai.GenerativeModel()
 
-    def get_available_models(self):
+    @staticmethod
+    def get_available_models():
         """
         获取可用的模型列表。
         """
         return list(bot.AVAILABLE_MODELS.keys())
 
-    def set_current_model(user_id, model_id):
+    def set_current_model(self, user_id, model_id):
         """
         设置用户当前使用的模型。
         """
@@ -45,7 +46,7 @@ class Gemini:
         使用指定的模型生成文本。
         """
         # system_instruction = prompts.get(user_id, {}).get("system_instruction", "")
-        # TODO: 从 prompts.yml 中读取 system_instruction
+        # TODO: 从 prompts.json 中读取 system_instruction
         system_instruction = ""
 
         generation_config = available_models[model_id]
