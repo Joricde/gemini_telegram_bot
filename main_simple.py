@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (ApplicationBuilder, CallbackContext, CommandHandler,
                           MessageHandler, filters, CallbackQueryHandler)
-
+from telegram.constants import ParseMode, ChatAction
 from bot.utils import logger
 from bot import PROMPTS, GOOGLE_API_KEY, SAFETY_SETTINGS, BOT_TOKEN
 
@@ -26,26 +26,25 @@ def set_model(user_id, prompt_name):
         raise ValueError(f"Invalid model name: {prompt_name}")
 
     model_config = PROMPTS[prompt_name]
-    if user_id not in user_models:
-        user_models[user_id] = genai.GenerativeModel(
-            model_name="gemini-exp-1114",
-            generation_config=genai.GenerationConfig(
-                temperature=model_config["temperature"],
-                top_p=model_config["top_p"],
-                top_k=model_config["top_k"],
-                max_output_tokens=model_config["max_output_tokens"]
-            ),
-            safety_settings=SAFETY_SETTINGS,
-            system_instruction=model_config["system_instruction"],
-        ).start_chat()
-        CURRENT_MODEL[user_id] = prompt_name
+    user_models[user_id] = genai.GenerativeModel(
+        model_name="gemini-exp-1114",
+        generation_config=genai.GenerationConfig(
+            temperature=model_config["temperature"],
+            top_p=model_config["top_p"],
+            top_k=model_config["top_k"],
+            max_output_tokens=model_config["max_output_tokens"]
+        ),
+        safety_settings=SAFETY_SETTINGS,
+        system_instruction=model_config["system_instruction"],
+    ).start_chat()
+    CURRENT_MODEL[user_id] = prompt_name
     return user_models[user_id]
 
 def get_model(user_id):
     """获取或创建用户的模型实例"""
     if user_id not in user_models:
         # 默认使用 storyteller 模型
-        logger.debug(list(PROMPTS.keys())[0])
+        # logger.debug(list(PROMPTS.keys())[0])
         return set_model(user_id, list(PROMPTS.keys())[0])
     else:
         return user_models[user_id]
@@ -77,10 +76,9 @@ async def echo(update: Update, context: CallbackContext, message=None):
         user_id = update.effective_user.id
         logger.debug(f'user_id:{user_id}')
         session_chat = get_model(user_id)
-        logger.debug(session_chat)
         response = session_chat.send_message(_message)
         await context.bot.send_message(
-            chat_id=update.effective_message.chat_id, text=response.text)
+            chat_id=update.effective_message.chat_id, text=response.text, parse_mode=ParseMode.MARKDOWN_V2)
 
 async def newchat_command(update: Update, context: CallbackContext) -> None:
     """重置用户的聊天会话"""
@@ -110,15 +108,22 @@ async def handle_model_selection(update: Update,
     query = update.callback_query
     await query.answer()
     assert  query.data in PROMPTS , f"Unknown model: {query.data}"
-    logger.debug(query.data)
     prompt_name = query.data
     try:
         user_id = update.effective_user.id
-        set_model(user_id, prompt_name)
+        m  = set_model(user_id, prompt_name)
+        logger.debug(m)
         CURRENT_MODEL[user_id] = prompt_name
         await query.edit_message_text(f"已切换到模型：{PROMPTS[prompt_name]['name']}")
     except ValueError as e:
         await query.edit_message_text(str(e))
+
+def error_handler(update, context):
+    """记录错误并发送消息给开发者。"""
+    logger.error(msg="运行时发生异常:", exc_info=context.error)
+    # 可以在这里添加发送消息给开发者的代码，例如：
+    # context.bot.send_message(chat_id=开发者 ID, text=f"发生错误：{context.error}")
+
 
 def main():
     token = BOT_TOKEN
@@ -136,6 +141,8 @@ def main():
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
     application.add_handler(CommandHandler("new", newchat_command))
+
+    application.add_error_handler(error_handler)
 
     logger.info("BOT START FINISH")
     application.run_polling()

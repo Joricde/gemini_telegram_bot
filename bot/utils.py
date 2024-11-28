@@ -10,16 +10,16 @@ if not os.path.exists(log_dir):
 logging.basicConfig(
     filename=os.path.join(log_dir, "bot.log"),
     format='%(asctime)s - %(levelname)s - %(filename)s - %(lineno)d - %(message)s',
-    encoding='utf-8'  # 移除 level 参数
+    encoding='utf-8'
 )
 
 # 获取 logger
 logger = logging.getLogger("gemini_telegram_bot")
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # 创建处理器
 handler = logging.StreamHandler()
-handler.setLevel(logging.INFO)  # 将 StreamHandler 的级别设置为 INFO
+handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(filename)s - %(lineno)d - %(message)s')
 handler.setFormatter(formatter)
 
