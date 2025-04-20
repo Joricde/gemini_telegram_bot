@@ -1,59 +1,135 @@
-import os
+from __init__ import (
+    AVAILABLE_MODELS,
+    DEFAULT_PROMPT_NAME,
+    GENERATION_CONFIG,
+    GOOGLE_API_KEY,
+    PROMPTS,
+    SAFETY_SETTINGS,
+    SYSTEM_INSTRUCTION,
+)
 
-from google.ai.generativelanguage_v1beta import HarmCategory
-from google.generativeai.types import HarmBlockThreshold
-
-import bot
-from utils import logger
 import google.generativeai as genai
-import yaml
+
+# 配置 API 密钥
+genai.configure(api_key=GOOGLE_API_KEY)
 
 
 class Gemini:
-    def __init__(self, model_name="gemini-1.5-flash"):
-        assert model_name in bot.AVAILABLE_MODELS , f"Unknown model: {model_name}"
-        self.model_name = model_name
-        self.model  = genai.GenerativeModel(
-            model_name=model_name,
-            generation_config=bot.GENERATION_CONFIG,
-            system_instruction=bot.SYSTEM_INSTRUCTION,
-            safety_settings=bot.SAFETY_SETTINGS
+    def __init__(self,
+                 model=AVAILABLE_MODELS[0],
+                 prompt=DEFAULT_PROMPT_NAME,
+                 system_instruction=SYSTEM_INSTRUCTION,
+                 generation_config=GENERATION_CONFIG,
+                 safety_settings=SAFETY_SETTINGS, ):
+        self._model_name = model
+        self._prompt = prompt
+        self._system_instruction = system_instruction
+        self._generation_config = generation_config
+        self._safety_settings = safety_settings
+        self._model = genai.GenerativeModel(
+            model_name=self._model_name,
+            system_instruction=self._system_instruction,
+            generation_config=self._generation_config,
+            safety_settings=self._safety_settings,
         )
-    genai.configure(api_key=bot.GOOGLE_API_KEY)
-    model = genai.GenerativeModel()
+        self.user_data = {}
 
-    @staticmethod
-    def get_available_models():
-        """
-        获取可用的模型列表。
-        """
-        return list(bot.AVAILABLE_MODELS.keys())
+    def generate_text_response(self, chat_id, message):
+        chat_session = self.user_data.setdefault(
+            chat_id,
+            {
+                "chat_session": self._model.start_chat(),
+                "model": self._model_name,
+                "prompt": self._prompt,
+            },
+        )["chat_session"]
 
-    def set_current_model(self, user_id, model_id):
-        """
-        设置用户当前使用的模型。
-        """
-        user_models[user_id] = model_id
+        response = chat_session.send_message(message)
+        return response
 
-    def get_current_model(user_id):
-        """
-        获取用户当前使用的模型。
-        """
-        return user_models.get(user_id, "gemini-1.5-flash")  # 默认使用 gemini-1.5-flash
+    def generate_media_response(self, chat_id, media_type, media_content, message=""):
+        chat_session = self.user_data.setdefault(
+            chat_id,
+            {
+                "chat_session": self._model.start_chat(),
+                "model": self._model_name,
+                "prompt": self._prompt,
+            },
+        )["chat_session"]
 
-    def generate_text(model_id, prompt, user_id):
-        """
-        使用指定的模型生成文本。
-        """
-        # system_instruction = prompts.get(user_id, {}).get("system_instruction", "")
-        # TODO: 从 prompts.json 中读取 system_instruction
-        system_instruction = ""
+        # 处理多模态输入
+        if media_type == "image":
+            if message:
+                # 文字 + 图片
+                response = chat_session.send_message([message, media_content])
+            else:
+                # 仅图片
+                response = chat_session.send_message(media_content)
+            return response
+        elif media_type == "audio":
+            if message:
+                # 文字 + 音频
+                response = chat_session.send_message([message, media_content])
+            else:
+                # 仅音频
+                response = chat_session.send_message(media_content)
+            return response
+        else:
+            raise ValueError(f"Unsupported media type: {media_type}")
 
-        generation_config = available_models[model_id]
-        response = genai.generate_text(
-            model=model_id,
-            prompt=prompt,
-            generation_config=generation_config,
-            system_instruction=system_instruction,
+    def change_model(self, chat_id, model):
+        # 更新用户的模型和 ChatSession
+        self.user_data.setdefault(
+            chat_id,
+            {
+                "chat_session": self._model.start_chat(),
+                "model": self._model_name,
+                "prompt": self._prompt,
+            },
+        )["model"] = model
+
+        # 使用实例变量创建 GenerativeModel 实例
+        self._model = genai.GenerativeModel(
+            model_name=model,
+            system_instruction=self._system_instruction,
+            generation_config=self._generation_config,
+            safety_settings=self._safety_settings,
         )
-        return response.text
+        self.user_data[chat_id]["chat_session"] = self._model.start_chat()
+        return "模型已更改为 " + model
+
+    def change_prompt(self, chat_id, prompt):
+        self.user_data.setdefault(
+            chat_id,
+            {
+                "chat_session": self._model.start_chat(),
+                "model": self._model_name,
+                "prompt": self._prompt,
+            },
+        )["prompt"] = prompt
+        return "预设已更改为 " + prompt
+
+    def reset(self, chat_id):
+        # 重置用户的 ChatSession
+        self.user_data[chat_id]["chat_session"] = self._model.start_chat()
+        return "对话已重置"
+
+    def remove_last_message(self, chat_id):
+        # 删除用户最后一条消息和助手最后一条回复
+        if chat_id in self.user_data and len(self.user_data[chat_id]["chat_session"].history) >= 2:
+            self.user_data[chat_id]["chat_session"].rewind()
+            return "已删除最后一条消息"
+        else:
+            return "没有消息可删除"
+
+    def edit_last_message(self, chat_id, new_message):
+        # 编辑用户最后一条消息，并重新生成回复
+        if chat_id in self.user_data and len(self.user_data[chat_id]["chat_session"].history) >= 1:
+            # 使用 ChatSession 的 rewind 方法删除最后一条消息
+            self.user_data[chat_id]["chat_session"].rewind()
+
+            # 使用 ChatSession 的 send_message 方法发送新的消息
+            response = self.user_data[chat_id]["chat_session"].send_message(new_message)
+            return response.text
+        else:
+            return "没有消息可编辑"

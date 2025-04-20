@@ -1,146 +1,95 @@
-from main_simple import get_model
-
 # gemini on telegram bot
-### 需求简介
-为了构建telegrambot 我首选应该准备一下sdk
-```txt
-google-generativeai
-python-telegram-bot
 
-```
-并且准备好配置文件
-我需要实现以下功能
-1. 首先bot应该能获取到用户信息用来判断用户来源和记录
-2. 对于用户给bot发送的信息,应该能做出响应
-3. 允许用户切换bot模型以及设定
-4. 对话记录
+### 需求简介
+
+为了构建 telegram bot，我首选应该准备一些 SDK：
+
+*   `google-generativeai`
+*   `python-telegram-bot`
+
+并且准备好配置文件。
+
+我需要实现以下功能：
+
+1.  首先，bot 应该能获取到用户信息，用来判断用户来源和记录。
+2.  对于用户给 bot 发送的信息，应该能做出响应。
+3.  允许用户切换 bot 模型以及设定。
+4.  对话记录
 
 ### 结构
-项目目录结构构建如下
+
+项目目录结构构建如下：
 ```text
 gemini-telegram-bot/
 ├── bot/
-│   ├── __init__.py
+│   ├── init.py
 │   ├── gemini.py
 │   ├── database.py
 │   ├── handlers.py
 │   ├── run.py
 │   ├── utils.py
 ├── config/
-│   ├── gemini.yml
-│   ├── prompts.yml
+│   ├── config.yml
+│   ├── prompts.json
 ├── main.py
 ├── requirements.txt
+├── conf.yml
 ```
-### 现在开始,为项目目录的文件进行逐个解释
-##### 总体运行逻辑
-通过main 来允许整个项目
-首先我应该构建一个```main.py```作为入口调用其他板块(
+### 现在开始，为项目目录的文件进行逐个解释
 
-##### main.py
-该文件作为程序的入口，负责初始化项目----对于本项目仅仅需要调用run.py即可
-##### bot/
-该目录包含bot的核心功能模块。
-###### \_\_init\_\_.py
-该文件用于将bot目录定义为一个Python包。
-这里读取初始化时候config以及prompts中的默认值
-参考代码如下
+#### 总体运行逻辑
 
-```python
-import os
+通过 `main.py` 来运行整个项目。
 
-import yaml
-from dotenv import load_dotenv
-from google.ai.generativelanguage_v1beta import HarmCategory
-from google.generativeai.types import HarmBlockThreshold
+#### main.py
 
-load_dotenv()
+该文件作为程序的入口，负责初始化项目，并调用 `run.py` 文件。
 
-print(os.getcwd())
+#### bot/
 
-with open("config/config.yml", "r", encoding="utf-8") as f:
-    config = yaml.safe_load(f)
+该目录包含 bot 的核心功能模块。
 
-with open("config/prompts.json", "r", encoding="utf-8") as f:
-    prompts = yaml.safe_load(f)
+##### \_\_init\_\_.py
 
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+该文件用于将 bot 目录定义为一个 Python 包，并读取初始化时候 `config.yml` 以及 `prompts.json` 中的默认值。
 
-AVAILABLE_MODELS = config.get("models", {})
-DEFAULT_PROMPT = prompts["default"]
-SYSTEM_INSTRUCTION = DEFAULT_PROMPT["system_instruction"]
-GENERATION_CONFIG = {
-    "temperature": DEFAULT_PROMPT["temperature"],
-    "top_p": DEFAULT_PROMPT["top_p"],
-    "top_k": DEFAULT_PROMPT["top_k"],
-    "max_output_tokens": DEFAULT_PROMPT["max_output_tokens"],
+##### handlers.py
+该文件包含 bot 的消息处理器，负责处理不同类型的消息，例如文本消息、命令消息等。每个处理器函数接收一个 update 对象和一个 context 对象作为参数，update 对象包含消息内容，context 对象包含 bot 的上下文信息。
+
+##### gemini.py
+首先，我应该创建一个 Gemini 类，用于为多用户能够自行选择属于自己的 prompt 中的配置。
+
+这个 Gemini 类应该是对 genai.GenerativeModel() 的封装，并带有自定义参数。
+
+需要去 config/prompts.json 读取形如一下的数据，并把这些参数传递给 genai.GenerativeModel()：
+```json
+{
+  "lilith_concise": {
+    "name": "莉莉丝",
+    "system_instruction": "你是金发碧眼的美少女大小姐(莉莉丝),你的特点是毒舌,智慧,冷静.你非常擅长以<凝练简洁,暗喻,黑色幽默,尖锐,挖苦,一针见血>等风格地指出事物的根本.对于认可的观点,你可以通过<黑色幽默,暗喻>等风格表示赞同.对于不认可或者模棱两可的,你应该以<反讽式的暗喻,辛辣的挖苦>风格驳斥.记住,请务必用最精炼简短的语言,直击要害.",
+    "temperature": 2,
+    "top_p": 1.0,
+    "top_k": 60,
+    "max_output_tokens": 256
+  }
 }
-SAFETY_SETTINGS = {
-    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.OFF,
-    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.OFF,
-    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.OFF,
-    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.OFF,
-}
-
-if GOOGLE_API_KEY is None:
-    raise ValueError("GOOGLE_API_KEY environment variable is not set.")
-
-if BOT_TOKEN is None:
-    raise ValueError("TELEGRAM_BOT_TOKEN environment variable is not set.")
-
 ```
 
-###### handlers.py
-该文件包含bot的消息处理器，负责处理不同类型的消息，例如文本消息、命令消息等。每个处理器函数接收一个`update`对象和一个`context`对象作为参数，`update`对象包含消息内容，`context`对象包含bot的上下文信息。
-
-###### gemini.py
-首先,我应该创建一个Gemini类,用于为多用户个能够自行选择属于自己的 prompt 中的配置,
-这个Gemini类应该是对    ```genai.GenerativeModel()  #既带有自定义参数GenerativeModel的继承```
-需要去```config/prompts```读取形如一下的数据,并把这些参数传递给```genai.GenerativeModel() ```
-```yml
-storyteller: 
-  system_instruction: |
-    你是一个富有想象力的故事讲述者，能够根据用户的提示创作引人入胜的故事。
-  temperature: 0.8
-  top_p: 0.9
-  top_k: 50
-  max_output_tokens: 2048
-```
-建立类中的方法,Gemini类根据init.py中的变量,设置自己的类变量(需要考虑调用来设置为公开变量或者私有变量)并设置一下方法,参考如下
-我应该不全这些方法,并给出参数的类型以及返回的类型
-```python
-def get_current_model(self):
-    pass
-def set_current_model(self, model_name):
-    # TODO: 我应该根据init.py中的给出的变量设置
-    pass
-def set_current_prompt(self,prompt):
-    # TODO:我应该为根据本init中给出的DEFAULT_PROMPT来为genai.GenerativeModel设置参数
-    pass
-
-def generate_text(self):
-    # TODO: 采用GenerativeModel.start_chat()来为用户回复(以便可以带记忆的和用户对话)
-    pass
-
-```
-
-
-###### database.py
+##### database.py
 该文件包含与数据库交互的代码，例如存储用户信息、对话记录等。
-首先,应该有一张用户表,表示可使用gemini的权限,应该记录用户的id 以及
-username(从telegram.ext处获取---update里包含了用户信息),并且应该记录用户当前使用的模型.
-然后应该创建另一张表格,来记录用户开启的每个对话()
 
-###### utils.py
+首先，应该有一张用户表，表示可使用 gemini 的权限，应该记录用户的 id 以及 username（从 telegram.ext 处获取，update 里包含了用户信息），并且应该记录用户当前使用的模型。
+
+然后应该创建另一张表格，来记录用户开启的每个对话。
+
+##### utils.py
 该文件包含一些工具类函数，例如日志记录、错误处理等。
 
-##### config/
-该目录包含bot的配置文件。
+#### config/
+该目录包含 bot 的配置文件。
 
-###### gemini.yml
-该文件包含Gemini API的配置信息，例如API密钥、模型ID等。
+##### config.yml
+该文件包含 Gemini API 的配置信息，例如 API 密钥、模型 ID 等。
 
-###### prompts.yml
-该文件包含对Gemini的system_instruction以及模型的temperature top_P等设定。
-
+prompts.json
+该文件包含对 Gemini 的 system_instruction 以及模型的 temperature、top_P 等设定。

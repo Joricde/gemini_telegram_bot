@@ -27,7 +27,7 @@ def set_model(user_id, prompt_name):
 
     model_config = PROMPTS[prompt_name]
     user_models[user_id] = genai.GenerativeModel(
-        model_name="gemini-exp-1114",
+        model_name="gemini-exp-1121",
         generation_config=genai.GenerationConfig(
             temperature=model_config["temperature"],
             top_p=model_config["top_p"],
@@ -35,10 +35,11 @@ def set_model(user_id, prompt_name):
             max_output_tokens=model_config["max_output_tokens"]
         ),
         safety_settings=SAFETY_SETTINGS,
-        system_instruction=model_config["system_instruction"],
+        system_instruction=model_config["system_instruction"] if len(model_config["system_instruction"])>0 else None,
     ).start_chat()
     CURRENT_MODEL[user_id] = prompt_name
     return user_models[user_id]
+
 
 def get_model(user_id):
     """获取或创建用户的模型实例"""
@@ -49,10 +50,11 @@ def get_model(user_id):
     else:
         return user_models[user_id]
 
+
 async def is_bot_mentioned(update: Update, context: CallbackContext):
     """检查机器人在群组中是否被提及"""
     message = update.message
-    if message.chat.type == "private":
+    if message and message.chat.type == "private":
         return True
     if message.text is not None and ("@" + context.bot.username) in message.text:
         return True
@@ -61,6 +63,7 @@ async def is_bot_mentioned(update: Update, context: CallbackContext):
             return True
     else:
         return False
+
 
 async def echo(update: Update, context: CallbackContext, message=None):
     """
@@ -76,9 +79,10 @@ async def echo(update: Update, context: CallbackContext, message=None):
         user_id = update.effective_user.id
         logger.debug(f'user_id:{user_id}')
         session_chat = get_model(user_id)
-        response = session_chat.send_message(_message)
+        response = session_chat.send_message(content=_message, safety_settings=SAFETY_SETTINGS)
         await context.bot.send_message(
-            chat_id=update.effective_message.chat_id, text=response.text, parse_mode=ParseMode.MARKDOWN_V2)
+            chat_id=update.effective_message.chat_id, text=response.text, parse_mode=ParseMode.MARKDOWN)
+
 
 async def newchat_command(update: Update, context: CallbackContext) -> None:
     """重置用户的聊天会话"""
@@ -89,6 +93,7 @@ async def newchat_command(update: Update, context: CallbackContext) -> None:
     else:
         await update.message.reply_text("你还没有开始对话。")
 
+
 async def send_model_keyboard(update: Update, context: CallbackContext):
     """创建带有每个可用模型按钮的键盘并将其发送给用户"""
     keyboard = []
@@ -96,33 +101,36 @@ async def send_model_keyboard(update: Update, context: CallbackContext):
         prompt_name = prompt_value["name"]
         keyboard.append(
             [InlineKeyboardButton(prompt_name,
-                                 callback_data=prompt_key)])
+                                  callback_data=prompt_key)])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("请选择一个模型：",
                                     reply_markup=reply_markup)
+
 
 async def handle_model_selection(update: Update,
                                  context: CallbackContext):
     """处理用户从键盘选择的模型"""
     query = update.callback_query
     await query.answer()
-    assert  query.data in PROMPTS , f"Unknown model: {query.data}"
+    assert query.data in PROMPTS, f"Unknown model: {query.data}"
     prompt_name = query.data
     try:
         user_id = update.effective_user.id
-        m  = set_model(user_id, prompt_name)
+        m = set_model(user_id, prompt_name)
         logger.debug(m)
         CURRENT_MODEL[user_id] = prompt_name
         await query.edit_message_text(f"已切换到模型：{PROMPTS[prompt_name]['name']}")
     except ValueError as e:
         await query.edit_message_text(str(e))
 
-def error_handler(update, context):
+
+async def error_handler(update,
+                        context):
     """记录错误并发送消息给开发者。"""
     logger.error(msg="运行时发生异常:", exc_info=context.error)
     # 可以在这里添加发送消息给开发者的代码，例如：
-    # context.bot.send_message(chat_id=开发者 ID, text=f"发生错误：{context.error}")
+    # context.bot.send_message(chat_id=update.effective_message.chat_id, text=f"发生错误：{context.error}")
 
 
 def main():
@@ -146,6 +154,7 @@ def main():
 
     logger.info("BOT START FINISH")
     application.run_polling()
+
 
 if __name__ == "__main__":
     main()
