@@ -27,7 +27,7 @@ def set_model(user_id, prompt_name):
 
     model_config = PROMPTS[prompt_name]
     user_models[user_id] = genai.GenerativeModel(
-        model_name="gemini-exp-1121",
+        model_name="gemini-2.0-flash",
         generation_config=genai.GenerationConfig(
             temperature=model_config["temperature"],
             top_p=model_config["top_p"],
