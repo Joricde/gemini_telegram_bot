@@ -1,9 +1,0 @@
-# Gemini API 凭据路径
-gemini:
-  # 可用的模型及其生成配置
-  models:  ["gemini-2.0-flash","gemini-2.5-flash-preview-04-17", "gemini-2.5-pro-preview-03-25", "gemini-exp-1121", "gemini-exp-1114", "learnlm-1.5-pro-experimental"]
-
-
-# 数据库配置
-database:
-  path: "bot.db"  # 数据库文件路径

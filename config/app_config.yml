@@ -1,0 +1,48 @@
+# Gemini API and Model Settings
+gemini_settings:
+
+  available_base_models:
+    - "gemini-2.0-flash"       # A good default, fast and capable
+    - "gemini-2.0-flash-lite"
+    - "gemini-2.5-pro-preview-05-06"
+
+
+  default_base_model: "gemini-2.0-flash"
+
+  default_generation_parameters:
+    temperature: 0.7
+    top_p: 0.9 # Adjusted from 0.8 for a slight increase in diversity if desired
+    top_k: 40
+    max_output_tokens: 2048 # Default max length for responses
+
+# Database Configuration
+database:
+  echo_sql: false # Set to true for SQLAlchemy to log all SQL statements (for debugging)
+
+# Default Application Behavior
+default_bot_behavior:
+  # Default mode for Bot1 when it joins a new group or for unconfigured groups.
+  # Options: "individual" or "shared"
+  group_chat_mode: "individual"
+
+  # In 'shared' group chat mode, whether random replies are enabled by default.
+  random_reply_enabled_in_shared_mode: true
+
+  # Parameters for the random reply logic in 'shared' mode
+  random_reply_parameters:
+    listen_message_count: 7 # Number of recent messages to consider for context/trigger
+    base_probability_p_denominator: 25 # Initial probability is 1/P. Higher P means lower probability.
+    # Example: If P=25, roughly 4% chance per qualifying message sequence.
+    # This can be adjusted further by message activity or content in the code.
+
+  # Default prompt key (from prompts.yml or database) to use for new private chats
+  # or if a user/group hasn't selected a specific prompt.
+  default_prompt_key: "none_prompt" # Refers to a key in prompts.yml or database
+
+# Logging Configuration
+logging:
+  level: "INFO"  # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+  file_path: "logs/bot.log"
+  # Max size of a single log file before rotation (e.g., 10MB)
+  max_bytes: 10485760
+  backup_count: 5
