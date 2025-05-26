@@ -41,7 +41,7 @@ default_bot_behavior:
 
 # Logging Configuration
 logging:
-  level: "INFO"  # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+  level: "DEBUG"  # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
   file_path: "logs/bot.log"
   # Max size of a single log file before rotation (e.g., 10MB)
   max_bytes: 10485760

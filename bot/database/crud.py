@@ -79,6 +79,11 @@ def create_prompt(db: Session, name: str, system_instruction: str, creator_user_
                   description: str | None = None, temperature: float | None = None, top_p: float | None = None,
                   top_k: int | None = None, max_output_tokens: int | None = None,
                   base_model_override: str | None = None, is_system_default: bool = False) -> models.Prompt | None:
+    # Ensure name is unique before creating
+    if get_prompt_by_name(db, name):
+        log.warning(f"Prompt with name '{name}' already exists. Cannot create duplicate.")
+        return None # Or raise an exception / return a specific error code
+
     db_prompt = models.Prompt(
         name=name,
         system_instruction=system_instruction,
@@ -95,11 +100,15 @@ def create_prompt(db: Session, name: str, system_instruction: str, creator_user_
     try:
         db.commit()
         db.refresh(db_prompt)
-        log.info(f"Prompt created: {name}")
+        log.info(f"Prompt '{name}' created successfully by user {creator_user_id or 'System'}.")
         return db_prompt
-    except IntegrityError as e:  # e.g., if name is not unique
+    except IntegrityError as e:
         db.rollback()
-        log.error(f"Could not create prompt '{name}'. Integrity error (e.g. name not unique?): {e}")
+        log.error(f"Could not create prompt '{name}'. Integrity error: {e}", exc_info=True)
+        return None
+    except Exception as e:
+        db.rollback()
+        log.error(f"An unexpected error occurred while creating prompt '{name}': {e}", exc_info=True)
         return None
 
 

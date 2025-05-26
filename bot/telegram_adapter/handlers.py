@@ -8,8 +8,7 @@ from telegram.constants import ChatAction
 from bot.utils import log
 from bot.database import SessionLocal
 from bot.database.crud import get_or_create_user
-# 从 bot.message_processing 导入新的私聊处理逻辑
-from bot.mesage_processing.private_chat import handle_private_message  # MODIFIED
+from bot.message_processing.private_chat import handle_private_message  # MODIFIED
 from bot.gemini_service import GeminiService  # To get type hint for context.bot_data
 
 

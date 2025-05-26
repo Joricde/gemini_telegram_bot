@@ -65,7 +65,7 @@ class GeminiService:
     def __init__(self):
         self.gemini_global_settings = APP_CONFIG.get("gemini_settings", {})
         self.default_gen_params_config = self.gemini_global_settings.get("default_generation_parameters", {})
-        self.default_base_model = self.gemini_global_settings.get("default_base_model", "gemini-1.5-flash")
+        self.default_base_model = self.gemini_global_settings.get("default_base_model", "gemini-2.0-flash")
 
         # Define default safety settings (can be made configurable in app_config.yml if needed)
         # Setting to BLOCK_NONE for all categories as per your __init__.py in the original structure.
