@@ -61,10 +61,10 @@
 ### Prompt 管理逻辑
 
 * 实现在 **bot/message_processing/prompt_manager.py** 中实现 **/upload\_prompt** 命令逻辑：
-    * 引导用户发送 `system_instruction`。
+    * 引导用户设定 `system_instruction`。
     * 提示用户为 Prompt 命名。
-    * 使用默认参数或 **app_config.yml** 中的参数，将新 Prompt 存入数据库 (`Prompt` 表)。
-* 实现 **/my\_prompts** 命令，列出用户创建的 Prompts。
+    * 使用默认参数或 **app_config.yml** 中的参数（也就是说用户最少只需要设定 prompt的name 以及 system_instruction 即可写入SQL中，其他参数皆使用默认），将新 Prompt 存入数据库 (`Prompt` 表)。
+* 实现 **/my\_prompts** 命令，列出目前SQL库内拥有的 Prompts。
 * 实现 **/set\_prompt <prompt_name_or_id>** 命令，允许用户在私聊中切换当前对话使用的 Prompt (更新对应 `ChatSessionState` 中的 `active_prompt_id`，并可能需要重置会话历史或提示用户)。
 * 将这些命令的处理器添加到 **handlers.py**。
 
