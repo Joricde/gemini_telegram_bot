@@ -20,7 +20,9 @@ class User(Base):
 
     # Relationships (可选，但有助于 ORM 操作)
     prompts_created = relationship("Prompt", back_populates="creator")
-    chat_sessions = relationship("ChatSessionState", back_populates="user")
+    # Removed direct back_populates from here to ChatSessionState to avoid circularity if ChatSessionState
+    # needs to be more flexible with its user relationship (e.g. if user_id could be nullable for system sessions)
+    # chat_sessions = relationship("ChatSessionState", back_populates="user")
 
 
 class Prompt(Base):
@@ -47,7 +49,6 @@ class Prompt(Base):
 
     # Relationships
     creator = relationship("User", back_populates="prompts_created")
-    # chat_sessions_using_this = relationship("ChatSessionState", back_populates="active_prompt") # 反向关系
 
 
 class GroupSetting(Base):
@@ -81,13 +82,15 @@ class ChatSessionState(Base):
 
     gemini_chat_history = Column(Text, nullable=True)  # JSON serialized history
 
+    # New column to mark the active session for a user/chat
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+
     last_interaction_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
-    user = relationship("User", back_populates="chat_sessions")
-    active_prompt = relationship(
-        "Prompt")  # Removed back_populates to avoid circular dependency if not needed immediately
+    user = relationship("User") # No back_populates needed if User model doesn't link back directly here for this use case
+    active_prompt = relationship("Prompt")
 
 
 class GroupMessageCache(Base):
@@ -100,7 +103,7 @@ class GroupMessageCache(Base):
                      nullable=True)  # Can be null if user not in our DB or system message
     username = Column(String, nullable=True)  # Telegram username
     text = Column(Text, nullable=True)
-    timestamp = Column(DateTime(timezone=True), nullable=False, default=datetime.datetime.now(datetime.timezone.utc))
+    timestamp = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.datetime.now(datetime.timezone.utc)) # Ensure UTC now
 
     # Relationships
     group = relationship("GroupSetting")

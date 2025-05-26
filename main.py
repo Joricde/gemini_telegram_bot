@@ -1,16 +1,13 @@
 # gemini-telegram-bot/main.py
 
 import asyncio
-import os
-from pathlib import Path
 
-# 确保 bot 包能被正确导入 (如果从根目录运行 main.py)
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, Defaults, ConversationHandler
 from telegram.constants import ParseMode
+# ... other imports ...
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, Defaults, ConversationHandler, \
+    CallbackQueryHandler  # Ensure CallbackQueryHandler is here
 
+# ... (rest of the imports and initial setup code from your previous main.py) ...
 from bot import (
     TELEGRAM_BOT_TOKEN,
     APP_CONFIG,
@@ -25,21 +22,18 @@ from bot.database import engine, init_db, SessionLocal
 from bot.database import models as db_models
 from bot.database.crud import create_prompt, get_prompt_by_name
 from bot.gemini_service import GeminiService
-# Import handlers including the new ConversationHandler
-from bot.telegram_adapter import handlers
-from bot.telegram_adapter.handlers import upload_prompt_conversation_handler # Explicitly import for clarity
+from bot.telegram_adapter import handlers  # Main handlers module
+from bot.telegram_adapter.handlers import upload_prompt_conversation_handler  # Specific import for clarity
 
 
-# --- Application Setup Functions ---
 def ensure_data_directory():
-    """Ensures the data directory for SQLite exists."""
     data_dir = PROJECT_ROOT / "data"
     if not data_dir.exists():
         data_dir.mkdir(parents=True, exist_ok=True)
         log.info(f"Created data directory: {data_dir}")
 
+
 def initialize_system_prompts():
-    """Loads prompts from prompts.yml into the database if they don't exist."""
     db = SessionLocal()
     try:
         log.info("Initializing system prompts from config into database...")
@@ -70,26 +64,20 @@ def initialize_system_prompts():
     finally:
         db.close()
 
+
 async def post_init(application: Application):
-    """
-    Hook to run after Application has been initialized but before it starts.
-    Useful for setting bot commands, etc.
-    """
     log.info("Running post_init hook...")
     await application.bot.set_my_commands([
         ("start", "🚀 开始/帮助"),
         ("help", "ℹ️ 显示帮助信息"),
-        ("my_prompts", "📚 查看我的可用角色"),
-        ("set_prompt", "🎨 设置当前对话角色"),
+        ("my_prompts", "📚 查看并选择角色"),
         ("upload_prompt", "✍️ 上传新的角色定义"),
         ("cancel", "❌ 取消当前操作"),
-        # ("mode", "🔧 (群管理员) 设置群聊模式"), # For later
     ])
     log.info("Bot commands set.")
 
 
 async def main():
-    """Main function to setup and run the bot."""
     log.info("Starting bot application...")
 
     if not TELEGRAM_BOT_TOKEN:
@@ -104,7 +92,7 @@ async def main():
     gemini_service = GeminiService()
     log.info("GeminiService initialized.")
 
-    defaults = Defaults(parse_mode=ParseMode.MARKDOWN) # Ensure Markdown is default
+    defaults = Defaults(parse_mode=ParseMode.MARKDOWN)
 
     application = (
         Application.builder()
@@ -115,31 +103,28 @@ async def main():
     )
 
     application.bot_data["gemini_service"] = gemini_service
-
     log.info("Telegram Application built.")
 
-    # Register Handlers
     application.add_handler(CommandHandler("start", handlers.start_command_handler))
     application.add_handler(CommandHandler("help", handlers.help_command_handler))
-
-    # Add Prompt Management Handlers
-    application.add_handler(handlers.upload_prompt_conversation_handler) # Add ConversationHandler
+    application.add_handler(handlers.upload_prompt_conversation_handler)
     application.add_handler(CommandHandler("my_prompts", handlers.my_prompts_command_handler))
-    application.add_handler(CommandHandler("set_prompt", handlers.set_prompt_command_handler))
 
+    # Updated CallbackQueryHandler pattern to catch both types of callbacks
+    application.add_handler(CallbackQueryHandler(handlers.handle_prompt_selection_callback,
+                                                 pattern="^(set_prompt_id:|prompt_page:|noop_page_indicator)"))
 
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
         handlers.private_message_handler
     ))
-
     application.add_error_handler(handlers.error_handler)
     log.info("Bot handlers registered.")
 
     log.info("Bot is starting to poll for updates...")
     try:
         await application.initialize()
-        await application.updater.start_polling() # type: ignore
+        await application.updater.start_polling()  # type: ignore
         await application.start()
         log.info("Bot is running.")
         while True:
@@ -147,7 +132,7 @@ async def main():
     except (KeyboardInterrupt, SystemExit):
         log.info("Bot shutting down...")
     finally:
-        if application.updater and application.updater.running: # type: ignore
+        if application.updater and application.updater.running:  # type: ignore
             await application.updater.stop()
         await application.stop()
         await application.shutdown()
