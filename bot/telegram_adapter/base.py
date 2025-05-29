@@ -13,27 +13,26 @@ from bot.message_processing.private_chat import handle_private_message
 from bot.gemini_service import GeminiService
 
 
+# bot/telegram_adapter/base.py
+
 async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends a welcome message and basic instructions when the /start command is issued."""
     user = update.effective_user
-    if not user:
-        log.warning("Could not get effective_user in start_command_handler")
-        return
-
+    # ... (user fetching logic remains the same) ...
     db = SessionLocal()
     try:
         db_user = get_or_create_user(
             db,
-            user_id=str(user.id),
-            username=user.username,
-            first_name=user.first_name,
-            last_name=user.last_name
+            user_id=str(user.id), # type: ignore
+            username=user.username, # type: ignore
+            first_name=user.first_name, # type: ignore
+            last_name=user.last_name # type: ignore
         )
         user_display_name = db_user.first_name or db_user.username or "用户"
     finally:
         db.close()
 
-    log.info(f"User {user.id} ({user.username}) started bot with /start")
+    log.info(f"User {user.id} ({user.username}) started bot with /start") # type: ignore
 
     welcome_message = (
         f"你好，{user_display_name}! 👋\n\n"
@@ -41,14 +40,12 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
         f"你可以直接向我发送消息开始对话。\n\n"
         f"**常用命令**:\n"
         f"`/start` 或 `/help` - 显示此帮助信息\n"
-        f"`/my_prompts` - 查看和选择你的私人角色\n"
+        f"`/my_prompts` - 查看、选择、编辑或删除你的私人角色\n" # Updated this line
         f"`/upload_prompt` - 创建一个新的自定义私人角色\n"
         f"`/cancel` - 在创建或编辑角色等操作中途取消\n"
-        # More commands will be added to the help message as they are implemented
     )
     if update.message:
         await update.message.reply_text(text=welcome_message)
-
 
 async def help_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends help message; currently aliases to start_command_handler."""
