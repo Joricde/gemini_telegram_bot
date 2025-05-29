@@ -1,6 +1,5 @@
 # Gemini API and Model Settings
 gemini_settings:
-
   available_base_models:
     - "gemini-2.0-flash"       # A good default, fast and capable
     - "gemini-2.0-flash-lite"
@@ -11,9 +10,9 @@ gemini_settings:
 
   default_generation_parameters:
     temperature: 0.7
-    top_p: 0.9 # Adjusted from 0.8 for a slight increase in diversity if desired
+    top_p: 0.9
     top_k: 40
-    max_output_tokens: 2048 # Default max length for responses
+    max_output_tokens: 2048
 
 # Database Configuration
 database:
@@ -21,28 +20,28 @@ database:
 
 # Default Application Behavior
 default_bot_behavior:
-  # Default mode for Bot1 when it joins a new group or for unconfigured groups.
-  # Options: "individual" or "shared"
-  group_chat_mode: "individual"
-
-  # In 'shared' group chat mode, whether random replies are enabled by default.
+  group_chat_mode: "individual" # Default mode for new groups
   random_reply_enabled_in_shared_mode: true
+  default_private_prompt_key: "none_prompt" # Refers to a key in prompts.yml or database (for private chats)
+  default_group_role_prompt_key: "neutral_group_member" # Refers to a key for a group_role_payload in prompts.yml
 
-  # Parameters for the random reply logic in 'shared' mode
+# Group Chat Specific Settings
+group_chat_settings:
+  default_system_headers_template: |
+    === SYSTEM HEADERS ===
+    INPUT_FORMAT: "{username}: {message_content}"
+    AI_BEHAVIOR: 作为群成员自然参与聊天，随时可以插话回复
+    RESPONSE_MODE: 直接发送你想表达的内容
+    === END_HEADERS ===
+    PAYLOAD (角色扮演设定)
+    {USER_CUSTOM_ROLE_PROMPT}
   random_reply_parameters:
-    listen_message_count: 7 # Number of recent messages to consider for context/trigger
-    base_probability_p_denominator: 25 # Initial probability is 1/P. Higher P means lower probability.
-    # Example: If P=25, roughly 4% chance per qualifying message sequence.
-    # This can be adjusted further by message activity or content in the code.
-
-  # Default prompt key (from prompts.yml or database) to use for new private chats
-  # or if a user/group hasn't selected a specific prompt.
-  default_prompt_key: "none_prompt" # Refers to a key in prompts.yml or database
+    listen_message_count: 7
+    base_probability_p_denominator: 25
 
 # Logging Configuration
 logging:
-  level: "DEBUG"  # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+  level: "INFO" # Changed from DEBUG for less verbosity by default
   file_path: "logs/bot.log"
-  # Max size of a single log file before rotation (e.g., 10MB)
-  max_bytes: 10485760
+  max_bytes: 10485760 # 10MB
   backup_count: 5

@@ -1,95 +1,102 @@
 # gemini-telegram-bot/bot/database/models.py
 
-from sqlalchemy import Column, Integer, String, Text, Float, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Float, Boolean, DateTime, ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func  # 用于设置默认时间戳
+from sqlalchemy.sql import func
 import datetime
+import enum
 
-from . import Base  # 从同目录下的 __init__.py 导入 Base
+from . import Base  # From bot.database.__init__
+
+
+# Enum for Prompt Types
+class PromptType(enum.Enum):
+    PRIVATE = "private"
+    GROUP_ROLE_PAYLOAD = "group_role_payload"
 
 
 class User(Base):
     __tablename__ = "users"
 
-    user_id = Column(String, primary_key=True, index=True)  # Telegram User ID (通常是整数，但字符串更灵活)
+    user_id = Column(String, primary_key=True, index=True)
     username = Column(String, nullable=True, index=True)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
-    # Relationships (可选，但有助于 ORM 操作)
     prompts_created = relationship("Prompt", back_populates="creator")
-    # Removed direct back_populates from here to ChatSessionState to avoid circularity if ChatSessionState
-    # needs to be more flexible with its user relationship (e.g. if user_id could be nullable for system sessions)
-    # chat_sessions = relationship("ChatSessionState", back_populates="user")
+    # chat_sessions = relationship("ChatSessionState", back_populates="user") # Defined in ChatSessionState
 
 
 class Prompt(Base):
     __tablename__ = "prompts"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    creator_user_id = Column(String, ForeignKey("users.user_id"), nullable=True)  # Nullable for system prompts
-    name = Column(String, index=True, nullable=False, unique=True)  # Prompt name should be unique
-    description = Column(String, nullable=True)
-    system_instruction = Column(Text, nullable=False)
+    creator_user_id = Column(String, ForeignKey("users.user_id"), nullable=True,
+                             index=True)  # Nullable for system prompts
+    name = Column(String, nullable=False,
+                  index=True)  # Not globally unique, but should be unique per user for their created prompts
 
-    # Persona-specific overrides for generation parameters
+    prompt_type = Column(SAEnum(PromptType), nullable=False, default=PromptType.PRIVATE, index=True)
+
+    description = Column(String, nullable=True)  # Optional description
+    system_instruction = Column(Text,
+                                nullable=False)  # For "private" type, this is the full instruction. For "group_role_payload", this is the payload.
+
     temperature = Column(Float, nullable=True)
     top_p = Column(Float, nullable=True)
     top_k = Column(Integer, nullable=True)
     max_output_tokens = Column(Integer, nullable=True)
-
-    # Persona-specific override for base model
     base_model_override = Column(String, nullable=True)
 
-    is_system_default = Column(Boolean, default=False)  # Is this a pre-defined system prompt?
+    is_system_default = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())  # Default now() for creation
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
-    # Relationships
     creator = relationship("User", back_populates="prompts_created")
+
+    # Relationship for GroupSetting pointing to a shared mode role prompt
+    # group_settings_shared_role = relationship("GroupSetting", foreign_keys="[GroupSetting.shared_mode_role_prompt_id]", back_populates="shared_mode_role_prompt_detail")
 
 
 class GroupSetting(Base):
     __tablename__ = "group_settings"
 
-    group_id = Column(String, primary_key=True, index=True)  # Telegram Group ID
-    default_mode = Column(String, default="individual", nullable=False)  # "individual" or "shared"
+    group_id = Column(String, primary_key=True, index=True)
+    current_mode = Column(String, default="individual", nullable=False)  # "individual" or "shared"
 
-    shared_mode_prompt_id = Column(Integer, ForeignKey("prompts.id"), nullable=True)
-    random_reply_enabled = Column(Boolean, default=True)
+    # Points to a Prompt of type GROUP_ROLE_PAYLOAD
+    shared_mode_role_prompt_id = Column(Integer, ForeignKey("prompts.id"), nullable=True)
+    random_reply_enabled = Column(Boolean, default=True, nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
-    # Relationship to the prompt used in shared mode
-    shared_mode_prompt = relationship("Prompt")
+    shared_mode_role_prompt_detail = relationship(
+        "Prompt")  # , foreign_keys=[shared_mode_role_prompt_id], back_populates="group_settings_shared_role")
 
 
 class ChatSessionState(Base):
     __tablename__ = "chat_session_states"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    # For private chats, telegram_chat_id = telegram_user_id
-    # For group individual mode, telegram_chat_id = group_id, telegram_user_id = user's ID
-    # For group shared mode, telegram_chat_id = group_id, telegram_user_id = None (or a special bot ID)
-    telegram_chat_id = Column(String, nullable=False, index=True)
-    telegram_user_id = Column(String, ForeignKey("users.user_id"), nullable=True, index=True)
+    telegram_chat_id = Column(String, nullable=False, index=True)  # Private chat_id or group_id
+    telegram_user_id = Column(String, ForeignKey("users.user_id"), nullable=True,
+                              index=True)  # User's ID in private or group-individual mode. Null for group-shared mode.
 
+    # For private/individual modes, this points to a "private" type Prompt.
+    # For group shared mode, this session might not directly use a prompt_id if the role is purely from GroupSetting,
+    # or it could point to a generic/base prompt if needed. Let's assume for now that active_prompt_id is for the main "interacting" prompt.
     active_prompt_id = Column(Integer, ForeignKey("prompts.id"), nullable=False)
-    current_base_model = Column(String, nullable=False)  # e.g., "gemini-1.5-flash"
+    current_base_model = Column(String, nullable=False)
+    gemini_chat_history = Column(Text, nullable=True)  # JSON serialized
 
-    gemini_chat_history = Column(Text, nullable=True)  # JSON serialized history
-
-    # New column to mark the active session for a user/chat
     is_active = Column(Boolean, default=True, nullable=False, index=True)
-
     last_interaction_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationships
-    user = relationship("User") # No back_populates needed if User model doesn't link back directly here for this use case
+    user = relationship("User")  # , back_populates="chat_sessions")
     active_prompt = relationship("Prompt")
 
 
@@ -98,13 +105,15 @@ class GroupMessageCache(Base):
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     group_id = Column(String, ForeignKey("group_settings.group_id"), nullable=False, index=True)
-    message_id = Column(String, nullable=False, unique=True)  # Telegram message ID, unique within a group
-    user_id = Column(String, ForeignKey("users.user_id"),
-                     nullable=True)  # Can be null if user not in our DB or system message
-    username = Column(String, nullable=True)  # Telegram username
+    message_id = Column(String, nullable=False)  # Telegram message ID
+    user_id = Column(String, ForeignKey("users.user_id"), nullable=True)
+    username = Column(String, nullable=True)
     text = Column(Text, nullable=True)
-    timestamp = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.datetime.now(datetime.timezone.utc)) # Ensure UTC now
+    timestamp = Column(DateTime(timezone=True), nullable=False,
+                       default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
-    # Relationships
+    # Adding unique constraint for message_id within a group_id
+    # __table_args__ = (UniqueConstraint('group_id', 'message_id', name='uq_group_message'),)
+
     group = relationship("GroupSetting")
     author = relationship("User")

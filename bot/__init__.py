@@ -76,6 +76,8 @@ DEFAULT_BOT_BEHAVIOR = APP_CONFIG.get("default_bot_behavior", {})
 LOGGING_CONFIG = APP_CONFIG.get("logging", {})
 DATABASE_CONFIG = APP_CONFIG.get("database", {}) # Though DATABASE_URL from .env might be primary
 
+GROUP_CHAT_SETTINGS = APP_CONFIG.get("group_chat_settings", {})
+
 # --- Simple test print (remove in production) ---
 if __name__ == '__main__':
     print("--- Configuration Loaded ---")
