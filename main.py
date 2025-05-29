@@ -36,7 +36,7 @@ from bot.database import models as db_models # <<< ADD THIS LINE
 from bot.telegram_adapter import base as base_handlers
 from bot.telegram_adapter import commands as command_handlers
 from bot.telegram_adapter import callbacks as callback_handlers
-from bot.telegram_adapter.conversations import private_prompt_upload, private_prompt_edit
+
 
 
 def ensure_data_directory():
@@ -188,12 +188,6 @@ async def main():
     # Basic handlers from base.py
     application.add_handler(CommandHandler("start", base_handlers.start_command_handler))
     application.add_handler(CommandHandler("help", base_handlers.help_command_handler))
-
-    # Conversation Handlers from conversations subpackage
-    # These need to be added before more general MessageHandlers or CallbackQueryHandlers
-    # that might conflict with their entry points or states.
-    application.add_handler(private_prompt_upload.upload_private_prompt_conversation_handler)
-    application.add_handler(private_prompt_edit.edit_private_prompt_conversation_handler)
 
     # Command Handlers from commands.py
     application.add_handler(CommandHandler("my_prompts", command_handlers.my_prompts_command_handler))

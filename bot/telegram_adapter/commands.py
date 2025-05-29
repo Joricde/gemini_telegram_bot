@@ -54,7 +54,7 @@ async def _generate_my_prompts_keyboard(
     categorized_prompts: list[tuple[db_models.Prompt, str, bool]] = []
 
     for p in system_private_prompts:
-        is_active = "🔹" if p.id == active_prompt_id_in_session else "▪️"
+        is_active = "✅" if p.id == active_prompt_id_in_session else ""
         display_name = f"{is_active} {p.name} (系统预设)"
         categorized_prompts.append((p, display_name, False))
 
@@ -63,7 +63,7 @@ async def _generate_my_prompts_keyboard(
     for p in user_private_prompts:
         if p.id in user_prompt_ids_already_listed:  # Should not happen if system prompts are distinct
             continue
-        is_active = "🔹" if p.id == active_prompt_id_in_session else "▪️"
+        is_active = "✅" if p.id == active_prompt_id_in_session else ""
         display_name = f"{is_active} {p.name}"
         categorized_prompts.append((p, display_name, True))
 
