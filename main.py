@@ -3,7 +3,7 @@
 import asyncio
 from typing import Optional
 
-from telegram import Update
+from telegram import Update, ChatMember
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -22,6 +22,7 @@ from bot import (
     PROJECT_ROOT,  # Used by ensure_data_directory
     GEMINI_SETTINGS  # Used by initialize_system_prompts
 )
+from bot.telegram_adapter.commands import CALLBACK_PREFIX_GROUP_MODE
 from bot.utils import log
 from bot.database import init_db, SessionLocal
 from bot.database.crud import create_prompt as db_create_prompt  # For initialize_system_prompts
@@ -37,7 +38,7 @@ from bot.telegram_adapter import callbacks as callback_handlers
 
 # Import states and processing functions from prompt_manager
 from bot.message_processing import prompt_manager  # For states and some direct calls
-
+from bot.message_processing import group_chat as group_chat_processor
 
 # --- Helper functions (ensure_data_directory, initialize_system_prompts, post_init) ---
 # These should be the same as in your provided main.py
@@ -268,6 +269,70 @@ async def edit_prompt_entry_callback(update: Update, context: ContextTypes.DEFAU
         return ConversationHandler.END
 
 
+async def group_mode_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles button presses for changing group mode."""
+    query = update.callback_query
+    if not query or not query.data or not query.message or not query.message.chat:
+        log.warning("Group mode callback: critical information missing in query.")
+        if query: await query.answer(text="请求处理失败，信息不完整。", show_alert=True)
+        return
+
+    await query.answer()  # 快速应答回调
+
+    clicked_user = query.from_user  # 用户对象
+    chat = query.message.chat  # 聊天对象
+
+    if not clicked_user:
+        log.warning("Group mode callback: query.from_user is None, cannot verify admin status.")
+        await query.edit_message_text("无法验证操作用户。")
+        return
+
+    # 再次检查点击按钮的用户是否为管理员
+    # 注意：is_user_group_admin 需要 Update 对象，但我们这里只有 query。
+    # 我们需要直接使用 context.bot.get_chat_member
+    is_admin_clicker = False
+    try:
+        chat_member = await context.bot.get_chat_member(chat_id=chat.id, user_id=clicked_user.id)
+        if chat_member.status in [ChatMember.ADMINISTRATOR, ChatMember.CREATOR]:
+            is_admin_clicker = True
+    except Exception as e:
+        log.error(
+            f"Error re-checking admin status in group_mode_callback for user {clicked_user.id} in chat {chat.id}: {e}")
+        # 出错时，为安全起见，假定不是管理员
+
+    if not is_admin_clicker:
+        log.info(f"User {clicked_user.id} (non-admin) clicked mode change button in group {chat.id}.")
+        # 编辑原消息提示权限不足，或者用 alert 回复
+        await query.answer(text="抱歉，只有群管理员才能执行此操作。", show_alert=True)
+        # 可以选择不修改原消息，或者修改为提示信息
+        # await query.edit_message_text(text=query.message.text + "\n\n操作失败：权限不足。")
+        return
+
+    callback_data_str = query.data
+    group_id_str = str(chat.id)
+
+    if not callback_data_str.startswith(CALLBACK_PREFIX_GROUP_MODE):
+        log.warning(f"Group mode callback: received unexpected data '{callback_data_str}'")
+        await query.edit_message_text(text="操作失败：无效的回调数据。")
+        return
+
+    new_mode_selected = callback_data_str.split(CALLBACK_PREFIX_GROUP_MODE, 1)[1]
+
+    if new_mode_selected not in ["individual", "shared"]:
+        log.warning(f"Group mode callback: received invalid mode '{new_mode_selected}' from data '{callback_data_str}'")
+        await query.edit_message_text(text=f"操作失败：无效的模式参数 '{new_mode_selected}'。")
+        return
+
+    log.info(
+        f"Admin {clicked_user.id} confirmed mode change to '{new_mode_selected}' for group {group_id_str} via button.")
+
+    # 调用核心逻辑处理函数
+
+    response_message_text = await group_chat_processor.set_group_chat_mode(group_id_str, new_mode_selected)
+
+    # 编辑原带有按钮的消息，显示结果
+    await query.edit_message_text(text=response_message_text)
+
 
 async def main_async():
     log.info("Starting bot application...")
@@ -373,6 +438,21 @@ async def main_async():
         base_handlers.private_message_handler
     ))
 
+    # NEW: General Group Message Handler
+    # This will catch any text message in groups/supergroups the bot is in.
+    # The handler itself will then check for mentions.
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND & (filters.ChatType.GROUPS | filters.ChatType.SUPERGROUP),
+        base_handlers.group_message_handler # Use the new handler from base.py
+    ))
+
+    application.add_handler(CommandHandler("mode", command_handlers.mode_command_handler))
+    application.add_handler(
+        CommandHandler("set_group_prompt", command_handlers.set_group_prompt_command_handler))
+    application.add_handler(CallbackQueryHandler(
+        callback_handlers.group_mode_callback_handler, # 新的回调处理函数
+        pattern=f"^{CALLBACK_PREFIX_GROUP_MODE}" # 匹配 "grp_mode:" 开头的回调
+    ))
     # Error Handler
     application.add_error_handler(base_handlers.error_handler)
 

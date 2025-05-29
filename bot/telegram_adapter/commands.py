@@ -9,7 +9,7 @@ from telegram.ext import ContextTypes, ConversationHandler, \
 from telegram.constants import ChatAction, ParseMode
 
 from bot.message_processing import prompt_manager
-from bot.utils import log
+from bot.utils import log, is_user_group_admin
 from bot.database import SessionLocal
 from bot.database import models as db_models  # For type hinting Prompt objects
 from bot.database.models import PromptType
@@ -27,6 +27,9 @@ from bot.message_processing.prompt_manager import (
     UPLOAD_PRIVATE_INSTRUCTION,  # Conversation state
     set_active_private_prompt, cancel_prompt_operation  # For /set_prompt by ID
 )
+
+from bot.message_processing import group_chat as group_chat_processor  # For set_group_chat_mode
+
 
 # --- Constants for Callback Data (relevant to /my_prompts) ---
 # These might be moved to a central constants file or __init__.py of telegram_adapter later
@@ -231,3 +234,86 @@ async def cancel_command_handler(update: Update, context: ContextTypes.DEFAULT_T
             await context.bot.send_message(chat_id=update.effective_chat.id, text=response_text)
 
     return ConversationHandler.END
+
+
+
+
+CALLBACK_PREFIX_GROUP_MODE = "grp_mode:" # 你可以将这个常量移到更中心的位置，如果多处用到
+
+async def mode_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handles the /mode command. Sends buttons for admins to switch group chat mode.
+    """
+    if not update.effective_chat or not update.message or not update.effective_user:
+        log.warning("Mode command: effective_chat, message, or effective_user missing.")
+        return
+
+    if update.effective_chat.type not in ["group", "supergroup"]:
+        await update.message.reply_text("此命令只能在群组或超级群组中使用。")
+        return
+
+    if not await is_user_group_admin(update, context):
+        log.info(f"User {update.effective_user.id} tried to use /mode in group {update.effective_chat.id} without admin rights.")
+        await update.message.reply_text("抱歉，只有群管理员才能更改群聊模式。")
+        return
+
+    # 不再解析 context.args，而是发送按钮
+    keyboard = [
+        [
+            InlineKeyboardButton("设置为 独立会话 (Individual) 模式", callback_data=f"{CALLBACK_PREFIX_GROUP_MODE}individual"),
+        ],
+        [
+            InlineKeyboardButton("设置为 共享会话 (Shared) 模式", callback_data=f"{CALLBACK_PREFIX_GROUP_MODE}shared"),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("请选择要设置的群聊模式：", reply_markup=reply_markup)
+
+
+# bot/telegram_adapter/commands.py
+
+# ... (现有 imports) ...
+from bot.utils import log, is_user_group_admin
+from bot.message_processing import group_chat as group_chat_processor  # For set_group_shared_role_prompt
+
+
+# ... (其他 command handlers, CALLBACK_PREFIX_GROUP_MODE etc.) ...
+
+async def set_group_prompt_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handles the /set_group_prompt command for admins to set the shared mode prompt.
+    Usage: /set_group_prompt <prompt_id_or_system_name>
+    """
+    if not update.effective_chat or not update.message or not update.effective_user:
+        log.warning("Set_group_prompt command: effective_chat, message, or effective_user missing.")
+        return
+
+    if update.effective_chat.type not in ["group", "supergroup"]:
+        await update.message.reply_text("此命令只能在群组或超级群组中使用。")
+        return
+
+    if not await is_user_group_admin(update, context):
+        log.info(
+            f"User {update.effective_user.id} tried to use /set_group_prompt in group {update.effective_chat.id} without admin rights.")
+        await update.message.reply_text("抱歉，只有群管理员才能设置群聊共享角色。")
+        return
+
+    if not context.args:  # Require at least one argument
+        await update.message.reply_text(
+            "请提供一个角色ID或系统预设的角色名称。\n"
+            "用法: `/set_group_prompt <角色ID或名称>`\n"
+            "例如: `/set_group_prompt 中立群成员` 或 `/set_group_prompt 2` (假设2是一个有效的群聊角色ID)"
+        )
+        return
+
+    prompt_identifier_arg = " ".join(context.args)  # Allow names with spaces
+    group_id_str = str(update.effective_chat.id)
+
+    log.info(
+        f"Admin {update.effective_user.id} attempting to set shared prompt to '{prompt_identifier_arg}' for group {group_id_str}.")
+
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+
+    response_message_text = await group_chat_processor.set_group_shared_role_prompt(group_id_str, prompt_identifier_arg)
+
+    await update.message.reply_text(response_message_text, parse_mode=ParseMode.MARKDOWN)

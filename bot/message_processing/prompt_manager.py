@@ -130,9 +130,9 @@ async def start_edit_private_prompt_flow(user_id: str, prompt_id_to_edit: int, c
             prompt.system_instruction) > 100 else prompt.system_instruction
 
         return (
-            f"你正在编辑私人角色：**{prompt.name}**。\n"
+            f"你正在编辑私人角色：{prompt.name}。\n"
             f"当前的系统指令为：\n`{original_instruction_snippet}`\n\n"
-            f"现在，请直接发送**新的系统指令**。原来的指令将被完全替换。\n\n"
+            f"现在，请直接发送新的系统指令。原来的指令将被完全替换。\n\n"
             f"输入 /cancel 可以随时取消编辑。"
         )
     finally:
@@ -164,7 +164,7 @@ async def received_new_instruction_for_edit(user_id: str, new_instruction: str, 
         if updated_prompt:
             log.info(f"User {user_id} successfully updated instruction for prompt ID {prompt_id} ('{updated_prompt.name}').")
             context_user_data.clear()
-            return f"私人角色 **'{updated_prompt.name}'** 的系统指令已成功更新！"
+            return f"私人角色 '{updated_prompt.name}' 的系统指令已成功更新！"
         else:
             # update_prompt_instruction should ideally return None if not found or not permitted
             log.warning(f"User {user_id}: Failed to update prompt ID {prompt_id}. update_prompt_instruction returned None.")
@@ -196,7 +196,7 @@ async def confirm_delete_private_prompt(user_id: str, prompt_id_to_delete: int) 
 
         if success:
             log.info(f"User {user_id} deleted private prompt ID {prompt_id_to_delete} ('{prompt_name}').")
-            return f"私人角色 **'{prompt_name}'** 已成功删除。"
+            return f"私人角色 '{prompt_name}' 已成功删除。"
         else:
             return f"删除私人角色 '{prompt_name}' 时发生错误。"
     except Exception as e:
@@ -214,9 +214,9 @@ async def set_active_private_prompt(user_id: str, prompt_id: int) -> str:
         if not prompt_to_set:
             return "找不到该角色，或你无权使用它。可能已被删除或输入错误。"
         if prompt_to_set.prompt_type != PromptType.PRIVATE:
-            return f"无法将角色 **'{prompt_to_set.name}'** 设置为私人聊天角色，因为它不是私人角色类型。"
+            return f"无法将角色 '{prompt_to_set.name}' 设置为私人聊天角色，因为它不是私人角色类型。"
         if not prompt_to_set.is_system_default and prompt_to_set.creator_user_id != user_id:
-            return f"你无法设置角色 **'{prompt_to_set.name}'**，因为它不属于你。"
+            return f"你无法设置角色 '{prompt_to_set.name}'，因为它不属于你。"
 
         new_base_model = prompt_to_set.base_model_override or \
                          APP_CONFIG.get("gemini_settings", {}).get("default_base_model", "gemini-1.5-flash-latest")
@@ -234,7 +234,7 @@ async def set_active_private_prompt(user_id: str, prompt_id: int) -> str:
         if new_session:
             log.info(
                 f"User {user_id} switched to private prompt '{prompt_to_set.name}' (ID: {prompt_to_set.id}). New session ID {new_session.id} created.")
-            return (f"已切换到私人角色: **{prompt_to_set.name}**。\n"
+            return (f"已切换到私人角色: {prompt_to_set.name}。\n"
                     "与TA的新对话已经开始！")
         else:
             log.error(

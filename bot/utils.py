@@ -3,7 +3,9 @@ import logging.handlers
 import os
 import sys
 import yaml
-
+from telegram import Update, ChatMember # Add ChatMember
+from telegram.ext import ContextTypes # Add ContextTypes
+from telegram.error import TelegramError # For catching potential errors
 # --- Configuration Loading (Simplified for this module) ---
 # In a real scenario, a shared config loader module might be preferred.
 _config = {}
@@ -81,6 +83,36 @@ def setup_logger(name="gemini_bot"):
 # --- Get a pre-configured logger instance ---
 # This allows other modules to simply import 'log' from this utils module.
 log = setup_logger()
+
+
+async def is_user_group_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Checks if the user who sent the message is an administrator or creator of the group."""
+    if not update.effective_chat or not update.effective_user:
+        return False
+
+    # Only applicable for group/supergroup chats
+    if update.effective_chat.type not in ["group", "supergroup"]:
+        return False
+
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+
+    try:
+        chat_member = await context.bot.get_chat_member(chat_id=chat_id, user_id=user_id)
+        if chat_member.status in [ChatMember.ADMINISTRATOR, ChatMember.OWNER]:
+            log.debug(f"User {user_id} is an admin/creator in chat {chat_id} (Status: {chat_member.status}).")
+            return True
+        log.debug(f"User {user_id} is not an admin/creator in chat {chat_id} (Status: {chat_member.status}).")
+        return False
+    except TelegramError as e:
+        log.error(f"TelegramError while checking admin status for user {user_id} in chat {chat_id}: {e}")
+        return False  # Assume not admin on error
+    except Exception as e:
+        log.error(f"Unexpected error while checking admin status for user {user_id} in chat {chat_id}: {e}",
+                  exc_info=True)
+        return False
+
+
 
 if __name__ == '__main__':
     # Example usage:
