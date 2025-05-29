@@ -1,49 +1,54 @@
 # gemini-telegram-bot/main.py
 
 import asyncio
-import importlib  # For dynamically importing handlers
+# import importlib # For dynamically importing handlers # Not strictly needed for this change
 
+from telegram import Update  # Added Update for type hinting in new handlers
 from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, Defaults, CallbackQueryHandler
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,  # Make sure filters is imported
+    Defaults,
+    CallbackQueryHandler,
+    ConversationHandler  # <-- Add ConversationHandler
+)
+from telegram.ext import ContextTypes  # Added ContextTypes for new handlers
 
 from bot import (
     TELEGRAM_BOT_TOKEN,
-    # APP_CONFIG, # Not directly used in main after this refactor, but other modules use it
-    PROMPTS_CONFIG,  # Used for initializing system prompts
+    PROMPTS_CONFIG,
     PROJECT_ROOT,
-    GEMINI_SETTINGS  # Used for initializing system prompts
-    # DEFAULT_BOT_BEHAVIOR, # Not directly used in main
-    # LOGGING_CONFIG # Logging is set up by utils
+    GEMINI_SETTINGS
 )
 from bot.utils import log
 from bot.database import init_db, SessionLocal
-from bot.database.crud import create_prompt as db_create_prompt  # Alias to avoid conflict
-from bot.database.models import PromptType  # For initializing system prompts
-from bot.gemini_service import GeminiService
-
-
-# (main.py imports)
-# ...
-from bot.database import init_db, SessionLocal
-# Alias existing imports if you keep them, or use the correct names directly
 from bot.database.crud import create_prompt as db_create_prompt
-from bot.database.crud import get_system_prompt_by_name # Correct function to import
+from bot.database.crud import get_system_prompt_by_name
 from bot.database.models import PromptType
-from bot.database import models as db_models # <<< ADD THIS LINE
-# ...
+from bot.database import models as db_models
+from bot.gemini_service import GeminiService
 
 # Import handlers from the new structure
 from bot.telegram_adapter import base as base_handlers
+# Import specific command handlers, including the new cancel_command_handler
 from bot.telegram_adapter import commands as command_handlers
 from bot.telegram_adapter import callbacks as callback_handlers
 
+# Import states and processing functions from prompt_manager
+from bot.message_processing import prompt_manager  # <-- Add this
 
+
+# Explicitly import states if needed, though accessing via prompt_manager.STATE_NAME is fine
+# from bot.message_processing.prompt_manager import UPLOAD_PRIVATE_INSTRUCTION, UPLOAD_PRIVATE_NAME, EDIT_PRIVATE_INSTRUCTION
+
+
+# ... (ensure_data_directory, initialize_system_prompts, post_init functions remain the same) ...
+# Make sure they are defined as in your existing main.py file. For brevity, I'm omitting them here.
 
 def ensure_data_directory():
     """Ensures the data directory (e.g., for SQLite) exists."""
-    # Assuming DATABASE_URL points to a file within a 'data' subdirectory of PROJECT_ROOT
-    # This logic might be more robust if DATABASE_URL's path is parsed,
-    # but for default "sqlite:///./data/bot.db" this works if PROJECT_ROOT is parent of "data"
     data_dir = PROJECT_ROOT / "data"
     if not data_dir.exists():
         try:
@@ -53,7 +58,6 @@ def ensure_data_directory():
             log.error(f"Could not create data directory {data_dir}: {e}")
 
 
-# (In main.py)
 def initialize_system_prompts():
     """Loads prompts from prompts.yml into the database if they don't exist."""
     db = SessionLocal()
@@ -61,75 +65,43 @@ def initialize_system_prompts():
         log.info("Initializing system prompts from config into database...")
         default_gen_params = GEMINI_SETTINGS.get("default_generation_parameters", {})
 
-        for key, prompt_data in PROMPTS_CONFIG.items():
-            prompt_name = prompt_data.get("name", key)
-
-            prompt_type_str = prompt_data.get("prompt_type", "private").upper()
+        for key, prompt_data_item in PROMPTS_CONFIG.items():
+            prompt_name = prompt_data_item.get("name", key)
+            prompt_type_str = prompt_data_item.get("prompt_type", "private").upper()
             try:
                 prompt_type_enum = PromptType[prompt_type_str]
             except KeyError:
-                log.warning(f"Invalid prompt_type '{prompt_type_str}' for '{prompt_name}' in prompts.yml. Defaulting to PRIVATE.")
+                log.warning(
+                    f"Invalid prompt_type '{prompt_type_str}' for '{prompt_name}' in prompts.yml. Defaulting to PRIVATE.")
                 prompt_type_enum = PromptType.PRIVATE
 
-            # Use the correct function: get_system_prompt_by_name
-            # This function already filters by is_system_default = True
-            existing_system_prompt = get_system_prompt_by_name(db, name=prompt_name)
+            query = db.query(db_models.Prompt).filter(
+                db_models.Prompt.name == prompt_name,
+                db_models.Prompt.is_system_default == True,
+                db_models.Prompt.prompt_type == prompt_type_enum
+            )
+            already_exists_with_correct_type = query.first()
 
-            # We also need to ensure it's the correct type if names can collide across types for system prompts
-            # However, get_system_prompt_by_name doesn't filter by type, so an additional check might be good
-            # if system prompts with the same name but different types are possible.
-            # For now, let's assume system prompt names are unique regardless of type.
-            # If a system prompt exists with this name, we check if its type matches.
-            # If types can't collide for same-named system prompts, this check is simpler.
-
-            found_and_correct_type = False
-            if existing_system_prompt:
-                if existing_system_prompt.prompt_type == prompt_type_enum:
-                    found_and_correct_type = True
-                else:
-                    log.warning(f"System prompt '{prompt_name}' exists but with a different type "
-                                f"(DB: {existing_system_prompt.prompt_type}, YML: {prompt_type_enum}). Will not create new one.")
-                                # Or decide to create a new one if names are not unique across types for system prompts
-
-            if not found_and_correct_type and not existing_system_prompt: # Simpler: if not existing_system_prompt (assuming names are unique for system prompts)
-                                                                          # Let's assume for now that get_system_prompt_by_name is sufficient to check existence
-                                                                          # and we don't have system prompts with same name but different types.
-                                                                          # The primary check is just `if not existing_system_prompt:`
-
-                # Simplified check:
-                # if not get_system_prompt_by_name(db, name=prompt_name): # This would be simpler if name is globally unique for system prompts
-
-                # Using the more specific check based on the query I wrote before for existing_system_prompt in main.py
-                # This query was more robust:
-                query = db.query(db_models.Prompt).filter(   # Use db_models here
-                    db_models.Prompt.name == prompt_name,    # Use db_models here
-                    db_models.Prompt.is_system_default == True,
-                    db_models.Prompt.prompt_type == prompt_type_enum
+            if not already_exists_with_correct_type:
+                created = db_create_prompt(
+                    db=db,
+                    name=prompt_name,
+                    description=prompt_data_item.get("description"),
+                    system_instruction=prompt_data_item.get("system_instruction", ""),
+                    prompt_type=prompt_type_enum,
+                    temperature=prompt_data_item.get("temperature", default_gen_params.get("temperature")),
+                    top_p=prompt_data_item.get("top_p", default_gen_params.get("top_p")),
+                    top_k=prompt_data_item.get("top_k", default_gen_params.get("top_k")),
+                    max_output_tokens=prompt_data_item.get("max_output_tokens",
+                                                           default_gen_params.get("max_output_tokens")),
+                    base_model_override=prompt_data_item.get("base_model_override"),
+                    is_system_default=True
                 )
-                already_exists_with_correct_type = query.first()
-
-
-                if not already_exists_with_correct_type:
-                    created = db_create_prompt( # Use aliased name
-                        db=db,
-                        name=prompt_name,
-                        description=prompt_data.get("description"),
-                        system_instruction=prompt_data.get("system_instruction", ""),
-                        prompt_type=prompt_type_enum,
-                        temperature=prompt_data.get("temperature", default_gen_params.get("temperature")),
-                        top_p=prompt_data.get("top_p", default_gen_params.get("top_p")),
-                        top_k=prompt_data.get("top_k", default_gen_params.get("top_k")),
-                        max_output_tokens=prompt_data.get("max_output_tokens", default_gen_params.get("max_output_tokens")),
-                        base_model_override=prompt_data.get("base_model_override"),
-                        is_system_default=True
-                    )
-                    if created:
-                        log.info(f"Added system prompt to DB: '{prompt_name}' (Type: {prompt_type_enum.value}, ID: {created.id})")
-                    else:
-                        log.error(f"Failed to add system prompt to DB: '{prompt_name}' (CRUD function returned None).")
-                # else:
-                #     log.debug(f"System prompt '{prompt_name}' (Type: {prompt_type_enum.value}) already exists.")
-
+                if created:
+                    log.info(
+                        f"Added system prompt to DB: '{prompt_name}' (Type: {prompt_type_enum.value}, ID: {created.id})")
+                else:
+                    log.error(f"Failed to add system prompt to DB: '{prompt_name}' (CRUD function returned None).")
     except Exception as e:
         log.error(f"Error initializing system prompts: {e}", exc_info=True)
     finally:
@@ -137,92 +109,197 @@ def initialize_system_prompts():
 
 
 async def post_init(application: Application):
-    """Sets bot commands after initialization."""
     log.info("Running post_init hook...")
     await application.bot.set_my_commands([
         ("start", "🚀 开始/帮助"),
         ("help", "ℹ️ 显示帮助信息"),
         ("my_prompts", "📚 查看和选择私人角色"),
         ("upload_prompt", "✍️ 创建新的私人角色"),
-        # Add /edit_prompt and /delete_prompt here if they become direct commands
-        # For now, they are initiated via buttons from /my_prompts
+        ("set_prompt", "💡 设置当前私人角色"),  # Added /set_prompt
         ("cancel", "❌ 取消当前操作"),
-        # Add group commands later, e.g. /group_mode, /set_group_role
     ])
     log.info("Bot commands set.")
 
 
-async def main():
+# --- Conversation Step Handlers (glue between ConversationHandler and prompt_manager) ---
+async def received_instruction_for_upload_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles receiving the system instruction during prompt upload."""
+    if not update.message or not update.message.text or not update.effective_user:
+        return prompt_manager.UPLOAD_PRIVATE_INSTRUCTION  # Stay in current state or handle error
+
+    user_id = str(update.effective_user.id)
+    instruction = update.message.text
+    if context.user_data is None: context.user_data = {}
+
+    log.debug(f"User {user_id} provided instruction for upload: '{instruction[:50]}...'")
+    response_text = await prompt_manager.received_private_instruction_for_upload(user_id, instruction,
+                                                                                 context.user_data)
+    await update.message.reply_text(response_text)
+
+    # Check if the instruction was accepted and we should move to the next state
+    if 'private_instruction_to_upload' in context.user_data:
+        return prompt_manager.UPLOAD_PRIVATE_NAME
+    else:  # Instruction might have been empty or invalid, stay in current state
+        return prompt_manager.UPLOAD_PRIVATE_INSTRUCTION
+
+
+async def received_name_for_upload_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles receiving the prompt name during prompt upload and creates the prompt."""
+    if not update.message or not update.message.text or not update.effective_user:
+        return ConversationHandler.END  # Or handle error appropriately
+
+    user_id = str(update.effective_user.id)
+    name = update.message.text
+    if context.user_data is None: context.user_data = {}
+
+    log.debug(f"User {user_id} provided name for upload: '{name}'")
+    response_text = await prompt_manager.received_private_prompt_name_and_create(user_id, name, context.user_data)
+    await update.message.reply_text(response_text)
+    return ConversationHandler.END  # End conversation after attempting to create
+
+
+async def received_new_instruction_for_edit_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles receiving the new system instruction during prompt edit."""
+    if not update.message or not update.message.text or not update.effective_user:
+        log.error("Edit handler: Update, message, text, or user missing.")
+        # Optionally, send a message to the user if possible
+        if update.message:
+            await update.message.reply_text("发生错误，无法处理您的输入。请重试或使用 /cancel。")
+        return ConversationHandler.END  # End conversation on error
+
+    user_id = str(update.effective_user.id)
+    new_instruction = update.message.text
+    if context.user_data is None:
+        log.warning(f"User {user_id} - Edit handler: context.user_data is None. Initializing.")
+        context.user_data = {}  # Should have been initialized by start_edit_private_prompt_flow
+
+    log.info(
+        f"User {user_id} - In received_new_instruction_for_edit_handler with instruction: '{new_instruction[:50]}...'")
+
+    # This function from prompt_manager.py will attempt to update the SQL database
+    response_text = await prompt_manager.received_new_instruction_for_edit(user_id, new_instruction, context.user_data)
+
+    await update.message.reply_text(response_text)  # This is your "update finish" message
+    return ConversationHandler.END  # End conversation after attempting to edit
+
+
+async def main_async():  # Renamed to avoid conflict if you run main() at the end
     log.info("Starting bot application...")
 
     if not TELEGRAM_BOT_TOKEN:
         log.critical("TELEGRAM_BOT_TOKEN is not set. Exiting.")
         return
 
-    ensure_data_directory()  # Ensure data directory exists for DB
-    init_db()  # Initialize database (create tables if not exist)
+    ensure_data_directory()
+    init_db()
     log.info("Database initialized.")
 
-    initialize_system_prompts()  # Load system prompts from YML to DB
+    initialize_system_prompts()
     log.info("System prompts initialized.")
 
     gemini_service = GeminiService()
     log.info("GeminiService initialized.")
 
-    # Set default parse mode for replies
-    defaults = Defaults(parse_mode=ParseMode.MARKDOWN)
+    # defaults = Defaults(parse_mode=ParseMode.MARKDOWN)
 
     application = (
         Application.builder()
         .token(TELEGRAM_BOT_TOKEN)
-        .defaults(defaults)
-        .post_init(post_init)  # Function to run after bot is initialized
+        # .defaults(defaults)
+        .post_init(post_init)
         .build()
     )
 
-    # Store GeminiService in bot_data for access in handlers
     application.bot_data["gemini_service"] = gemini_service
     log.info("Telegram Application built and GeminiService stored in bot_data.")
 
+    # --- Define ConversationHandlers ---
+    # Assumes cancel_command_handler is in command_handlers module
+    # and upload_prompt_command_handler is also in command_handlers
+    upload_prompt_conv_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler("upload_prompt", command_handlers.upload_prompt_command_handler),
+            # CallbackQueryHandler for create button is handled by private_prompts_callback_handler returning UPLOAD_PRIVATE_INSTRUCTION
+        ],
+        states={
+            prompt_manager.UPLOAD_PRIVATE_INSTRUCTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+                               received_instruction_for_upload_handler)
+            ],
+            prompt_manager.UPLOAD_PRIVATE_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+                               received_name_for_upload_handler)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", command_handlers.cancel_command_handler)],
+        # If the callback handler is intended to be an entry point, map_to_state can be useful
+        # or ensure it's part of application.add_handler before this ConversationHandler
+        # and that the state it returns is correctly picked up.
+        # For button-triggered conversations, the callback handler returning a state
+        # effectively acts as an entry point if the ConversationHandler is already registered.
+    )
+
+    edit_prompt_conv_handler = ConversationHandler(
+        entry_points=[
+            # IMPORTANT: Entry for edit is when private_prompts_callback_handler returns
+            # the EDIT_PRIVATE_INSTRUCTION state. No explicit command entry point here
+            # is typically needed if the callback handler correctly returns the state.
+        ],
+        states={
+            prompt_manager.EDIT_PRIVATE_INSTRUCTION: [  # This state is returned by callbacks.py
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,  # Catches user's text message
+                    received_new_instruction_for_edit_handler  # Calls the function defined above
+                )
+            ]
+            # Add other states here if your edit process had more steps
+        },
+        fallbacks=[CommandHandler("cancel", command_handlers.cancel_command_handler)],
+        # per_user=True, per_chat=True are defaults and usually correct for this.
+    )
+
     # --- Register Handlers ---
-    # Basic handlers from base.py
+    # IMPORTANT: ConversationHandlers should typically be added before more general message handlers.
+    application.add_handler(upload_prompt_conv_handler)
+    application.add_handler(edit_prompt_conv_handler)
+
+    # Basic command handlers
     application.add_handler(CommandHandler("start", base_handlers.start_command_handler))
     application.add_handler(CommandHandler("help", base_handlers.help_command_handler))
+    application.add_handler(
+        CommandHandler("cancel", command_handlers.cancel_command_handler))  # Ensure /cancel is standalone too
 
-    # Command Handlers from commands.py
+    # Prompt management commands
     application.add_handler(CommandHandler("my_prompts", command_handlers.my_prompts_command_handler))
+    application.add_handler(CommandHandler("set_prompt", command_handlers.set_prompt_command_handler))
+    # upload_prompt is an entry to a ConversationHandler, already added above.
 
-    # Callback Query Handlers from callbacks.py
-    # This handler manages multiple patterns for private prompt actions.
-    # The pattern here should be broad enough or specific if this handler only does one thing.
-    # Our private_prompts_callback_handler handles various "pr_" prefixed callbacks.
+    # Callback Query Handler for /my_prompts buttons
+    # This handler (private_prompts_callback_handler) can return states
+    # that will be picked up by the ConversationHandlers defined above.
     application.add_handler(CallbackQueryHandler(
         callback_handlers.private_prompts_callback_handler,
-        pattern="^pr_"  # Catches all callbacks starting with "pr_"
+        pattern="^pr_"
     ))
 
-    # General Private Message Handler from base.py
-    # This should generally be one of the last message handlers added for private chats
-    # to ensure commands and conversation states are processed first.
+    # General Private Message Handler (should be one of the last for private chats)
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
         base_handlers.private_message_handler
     ))
 
-    # Error Handler from base.py
+    # Error Handler
     application.add_error_handler(base_handlers.error_handler)
 
     log.info("All bot handlers registered.")
-
     log.info("Bot is starting to poll for updates...")
     try:
-        await application.initialize()  # Initializes the bot, dispatcher, etc.
-        await application.updater.start_polling()  # type: ignore # Start polling for updates
-        await application.start()  # Start the application (starts the updater)
+        await application.initialize()
+        await application.updater.start_polling()  # type: ignore
+        await application.start()
         log.info("Bot is running.")
-        # Keep the application running until interrupted
         while True:
-            await asyncio.sleep(3600)  # Sleep for an hour, or use a more robust keep-alive
+            await asyncio.sleep(3600)
     except (KeyboardInterrupt, SystemExit):
         log.info("Bot shutting down via interrupt...")
     except Exception as e:
@@ -237,5 +314,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
+    asyncio.run(main_async())  # Run the renamed async main function

@@ -47,7 +47,7 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
         # More commands will be added to the help message as they are implemented
     )
     if update.message:
-        await update.message.reply_text(text=welcome_message, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(text=welcome_message)
 
 
 async def help_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -100,9 +100,10 @@ async def private_message_handler(update: Update, context: ContextTypes.DEFAULT_
 
     if response_text:
         try:
-            if message: await message.reply_text(response_text, parse_mode=ParseMode.MARKDOWN)
+            if message: await message.reply_text(response_text)
         except Exception as e:
             log.error(f"Error sending reply to user {user.id}: {e}", exc_info=True)
+            log.error(f"Error sending message {user.id}: {response_text}", exc_info=True)
             try:
                 if message: await message.reply_text(response_text)
             except Exception as e_plain:

@@ -88,14 +88,13 @@ async def private_prompts_callback_handler(update: Update, context: ContextTypes
 
             if query.message:  # edit_message_text requires query.message
                 if reply_markup:
-                    await query.edit_message_text(text=message_text, reply_markup=reply_markup,
-                                                  parse_mode=ParseMode.MARKDOWN)
+                    await query.edit_message_text(text=message_text, reply_markup=reply_markup)
                 else:
                     await query.edit_message_text(text=message_text)
             elif chat_id_for_actions:  # Fallback if original message is gone but we have chat_id
                 log.warning("query.message is None for pagination. Sending new message.")
                 await context.bot.send_message(chat_id=chat_id_for_actions, text=message_text,
-                                               reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+                                               reply_markup=reply_markup)
             else:
                 log.error("Cannot update UI for pagination: no query.message and no chat_id_for_actions.")
 
@@ -117,23 +116,21 @@ async def private_prompts_callback_handler(update: Update, context: ContextTypes
 
             message_edited_or_sent = False
             if query.message:
-                await query.edit_message_text(text=response_text, parse_mode=ParseMode.MARKDOWN)  # Show confirmation
+                await query.edit_message_text(text=response_text)  # Show confirmation
                 message_edited_or_sent = True
                 if chat_id_for_actions:  # Refresh keyboard
                     await context.bot.send_chat_action(chat_id=chat_id_for_actions, action=ChatAction.TYPING)
                 reply_markup, message_text_refreshed = await _generate_my_prompts_keyboard(user_id, page=0)
                 if reply_markup:
-                    await query.edit_message_text(text=message_text_refreshed, reply_markup=reply_markup,
-                                                  parse_mode=ParseMode.MARKDOWN)
+                    await query.edit_message_text(text=message_text_refreshed, reply_markup=reply_markup)
 
             if not message_edited_or_sent and chat_id_for_actions:  # Fallback if original message is gone
                 log.warning("query.message is None for select prompt. Sending new messages.")
-                await context.bot.send_message(chat_id=chat_id_for_actions, text=response_text,
-                                               parse_mode=ParseMode.MARKDOWN)
+                await context.bot.send_message(chat_id=chat_id_for_actions, text=response_text)
                 await context.bot.send_chat_action(chat_id=chat_id_for_actions, action=ChatAction.TYPING)
                 reply_markup, message_text_refreshed = await _generate_my_prompts_keyboard(user_id, page=0)
                 await context.bot.send_message(chat_id=chat_id_for_actions, text=message_text_refreshed,
-                                               reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+                                               reply_markup=reply_markup)
             elif not chat_id_for_actions:
                 log.error("Cannot update UI for select prompt: no query.message and no chat_id_for_actions.")
 
@@ -150,11 +147,10 @@ async def private_prompts_callback_handler(update: Update, context: ContextTypes
 
             response_text = await start_edit_private_prompt_flow(user_id, prompt_id_to_edit, context.user_data)
             if query.message:
-                await query.edit_message_text(text=response_text, parse_mode=ParseMode.MARKDOWN)
+                await query.edit_message_text(text=response_text)
             elif chat_id_for_actions:
                 log.warning("query.message is None for edit prompt start. Sending new message.")
-                await context.bot.send_message(chat_id=chat_id_for_actions, text=response_text,
-                                               parse_mode=ParseMode.MARKDOWN)
+                await context.bot.send_message(chat_id=chat_id_for_actions, text=response_text)
             else:
                 log.error("Cannot start edit flow UI: no query.message and no chat_id_for_actions.")
             next_conversation_state = EDIT_PRIVATE_INSTRUCTION
@@ -176,13 +172,12 @@ async def private_prompts_callback_handler(update: Update, context: ContextTypes
 
             message_edited_or_sent = False
             if query.message:
-                await query.edit_message_text(text=response_text, parse_mode=ParseMode.MARKDOWN)
+                await query.edit_message_text(text=response_text)
                 message_edited_or_sent = True
 
             if not message_edited_or_sent and chat_id_for_actions:
                 log.warning("query.message is None for delete confirmation. Sending new message for result.")
-                await context.bot.send_message(chat_id=chat_id_for_actions, text=response_text,
-                                               parse_mode=ParseMode.MARKDOWN)
+                await context.bot.send_message(chat_id=chat_id_for_actions, text=response_text)
             elif not chat_id_for_actions:
                 log.error("Cannot show delete confirmation: no query.message and no chat_id_for_actions.")
 
@@ -190,7 +185,7 @@ async def private_prompts_callback_handler(update: Update, context: ContextTypes
                 await context.bot.send_chat_action(chat_id=chat_id_for_actions, action=ChatAction.TYPING)
                 reply_markup, new_message_text = await _generate_my_prompts_keyboard(user_id, page=0)
                 await context.bot.send_message(chat_id=chat_id_for_actions, text=new_message_text,
-                                               reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+                                               reply_markup=reply_markup)
             else:
                 log.error("Cannot send refreshed prompt list after delete: no chat_id_for_actions.")
 
@@ -203,11 +198,10 @@ async def private_prompts_callback_handler(update: Update, context: ContextTypes
         log.info(f"User {user_id} chose to create a new private prompt via button.")
         response_text = await start_upload_private_prompt_flow(user_id, context.user_data)
         if query.message:
-            await query.edit_message_text(text=response_text, parse_mode=ParseMode.MARKDOWN)
+            await query.edit_message_text(text=response_text)
         elif chat_id_for_actions:
             log.warning("query.message is None for create prompt start. Sending new message.")
-            await context.bot.send_message(chat_id=chat_id_for_actions, text=response_text,
-                                           parse_mode=ParseMode.MARKDOWN)
+            await context.bot.send_message(chat_id=chat_id_for_actions, text=response_text)
         else:
             log.error("Cannot start create flow UI: no query.message and no chat_id_for_actions.")
         next_conversation_state = UPLOAD_PRIVATE_INSTRUCTION
