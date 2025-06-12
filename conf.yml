@@ -1,6 +1,0 @@
-TELEGRAM_BOT_TOKEN : "TELEGRAM_BOT_TOKEN"
-GEMINI_API_KEY : "GEMINI_API_KEY"
-PROXY : {
-    'http': 'socks5h://localhost:7890',
-    'https': 'socks5h://localhost:7890',
-}
