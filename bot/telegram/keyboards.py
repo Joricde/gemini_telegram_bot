@@ -1,7 +1,7 @@
 # bot/telegram/keyboards.py
 from typing import List
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
+from bot.services.prompt_service import UnifiedPrompt
 from bot.database import models
 
 
@@ -20,30 +20,41 @@ def create_start_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
-def create_prompt_list_keyboard(prompts: List[models.Prompt]) -> InlineKeyboardMarkup:
+def create_prompt_list_keyboard(prompts: List[UnifiedPrompt], active_key: str) -> InlineKeyboardMarkup:
     """
-    Creates a keyboard to display a list of user-defined prompts.
-    Each row has the prompt title and a delete button.
+    Creates a keyboard to display a list of all available prompts.
+
+    Args:
+        prompts: A list of UnifiedPrompt objects from PromptService.
+        active_key: The key of the currently active prompt for this session.
     """
     keyboard = []
     for prompt in prompts:
-        # Add a checkmark if the prompt is active
-        button_text = f"✅ {prompt.title}" if prompt.is_active else prompt.title
+        # Check if the current prompt's key matches the session's active key
+        is_active = prompt["key"] == active_key
+        button_text = f"✅ {prompt['title']}" if is_active else prompt['title']
 
-        # We create a row with two buttons: one to select, one to delete
-        row = [
-            InlineKeyboardButton(button_text, callback_data=f"select_prompt:{prompt.id}"),
-            InlineKeyboardButton("❌", callback_data=f"delete_prompt:{prompt.id}"),
-        ]
+        # The callback data must be the unique key
+        callback_data_select = f"select_prompt:{prompt['key']}"
+
+        row = [InlineKeyboardButton(button_text, callback_data=callback_data_select)]
+
+        # Only allow deleting prompts from the database (source: 'db')
+        if prompt['source'] == 'db':
+            prompt_id = prompt['key'].split(':')[1]
+            callback_data_delete = f"delete_prompt:{prompt_id}"
+            row.append(InlineKeyboardButton("❌", callback_data=callback_data_delete))
+
         keyboard.append(row)
 
     # Add navigation buttons at the bottom
     keyboard.append([
-        InlineKeyboardButton("＋ Add New Prompt", callback_data="add_new_prompt"),
-        InlineKeyboardButton("« Back to Main Menu", callback_data="start_menu"),
+        InlineKeyboardButton("＋ Add New", callback_data="add_new_prompt"),
+        InlineKeyboardButton("« Back", callback_data="start_menu"),
     ])
 
     return InlineKeyboardMarkup(keyboard)
+
 
 def create_confirm_delete_keyboard(prompt_id: int) -> InlineKeyboardMarkup:
     """

@@ -8,12 +8,11 @@ from bot.core.config import settings
 from bot.core.logging import logger
 
 
-# Define a unified structure for all prompts to be sent to the UI
+# This unified structure is great! We'll keep it.
 class UnifiedPrompt(TypedDict):
-    id: str  # Can be a DB id (int as str) or a YAML key (str)
+    key: str  # A unique key like 'yaml:default' or 'db:123'
     title: str
-    is_active: bool
-    source: Literal["db", "yaml"]
+    source: Literal["yaml", "db"]
 
 
 class PromptService:
@@ -25,6 +24,7 @@ class PromptService:
     def create_new_prompt(self, user_id: int, title: str, text: str) -> Optional[models.Prompt]:
         """Creates a new shared prompt in the database."""
         try:
+            # This correctly calls the working CRUD function
             prompt = crud.create_user_prompt(db=self.db, user_id=user_id, title=title, text=text)
             logger.info(f"Successfully created shared prompt '{title}' for user {user_id}.")
             return prompt
@@ -33,41 +33,51 @@ class PromptService:
             self.db.rollback()
             return None
 
-    def get_available_prompts(self, active_prompt_key: str) -> List[UnifiedPrompt]:
+    def get_available_prompts(self) -> List[UnifiedPrompt]:
         """
         Gets a combined list of all available prompts from YAML and the database.
-
-        Args:
-            active_prompt_key: The key of the currently active prompt for the session
-                               (e.g., 'yaml:default', 'db:123').
-
-        Returns:
-            A unified list of prompts for display.
+        This list is the same for all users.
         """
         unified_list: List[UnifiedPrompt] = []
 
         # 1. Add public prompts from prompts.yml
         for key, value in settings.prompts.items():
             unified_list.append({
-                "id": key,
-                "title": f"[Public] {value['title']}",
-                "is_active": active_prompt_key == f"yaml:{key}",
+                "key": f"yaml:{key}",
+                "title": f"[Public] {value.get('title', key)}",
                 "source": "yaml"
             })
 
-        # 2. Add shared prompts from the database
-        db_prompts = crud.higet_all_db_prompts(db=self.db)
+        # 2. Add shared prompts from the database (FIXED TYPO)
+        db_prompts = crud.get_all_db_prompts(db=self.db)
         for prompt in db_prompts:
             unified_list.append({
-                "id": str(prompt.id),
+                "key": f"db:{prompt.id}",
                 "title": f"[Shared] {prompt.title}",
-                "is_active": active_prompt_key == f"db:{prompt.id}",
                 "source": "db"
             })
 
         return unified_list
 
+    def get_prompt_text_by_key(self, prompt_key: str) -> Optional[str]:
+        """
+        Resolves a prompt key (e.g., 'yaml:default', 'db:123') to its text content.
+        """
+        if not prompt_key or ':' not in prompt_key:
+            prompt_key = "yaml:default" # Fallback to default
+
+        try:
+            source, key = prompt_key.split(":", 1)
+            if source == "yaml":
+                return settings.prompts.get(key, {}).get("prompt")
+            elif source == "db":
+                prompt_id = int(key)
+                prompt_obj = crud.get_db_prompt_by_id(db=self.db, prompt_id=prompt_id)
+                return prompt_obj.prompt_text if prompt_obj else None
+        except (ValueError, IndexError) as e:
+            logger.error(f"Invalid prompt key format: {prompt_key}. Error: {e}")
+            return None # Return None if key is invalid
+
     def delete_shared_prompt(self, user_id: int, prompt_id: int) -> bool:
         """Deletes a shared prompt from the database."""
-        # user_id is passed for logging purposes
         return crud.delete_prompt(db=self.db, user_id=user_id, prompt_id=prompt_id)

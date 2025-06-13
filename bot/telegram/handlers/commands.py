@@ -71,26 +71,31 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def my_prompts_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handles the /my_prompts command.
-    Displays a list of the user's custom prompts with selection buttons.
+    Displays a list of all available prompts with selection buttons.
     """
     user = update.effective_user
-    logger.info(f"/my_prompts command received from user {user.id}")
+    chat_id = update.effective_chat.id
+    logger.info(f"/my_prompts command from user {user.id} in chat {chat_id}")
 
-    # Retrieve services from context
-    db = context.bot_data["db_session"]
     prompt_service: PromptService = context.bot_data["prompt_service"]
+    db = context.bot_data["db_session"]
 
-    user_prompts = prompt_service.get_available_prompts(active_prompt_key=db)
+    # Get all available prompts (from YAML and DB)
+    all_prompts = prompt_service.get_available_prompts()
 
-    if not user_prompts:
+    # Get the active key for the current chat session
+    session = crud.get_or_create_session(db=db, chat_id=chat_id)
+    active_key = session.active_prompt_key
+
+    if not all_prompts:
         await update.message.reply_text(
-            "You haven't created any custom prompts yet. "
-            "You can create one using the main menu (/start)."
+            "No prompts are available. You can add a new shared one via the menu."
         )
         return
 
-    keyboard = keyboards.create_prompt_list_keyboard(user_prompts)
+    # Pass the full list and the active key to the keyboard builder
+    keyboard = keyboards.create_prompt_list_keyboard(prompts=all_prompts, active_key=active_key)
     await update.message.reply_text(
-        "Here are your custom prompts. Click one to make it active.",
+        "Here are the available personas. Click one to make it active for this chat.",
         reply_markup=keyboard
     )

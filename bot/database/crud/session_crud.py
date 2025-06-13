@@ -77,3 +77,21 @@ def reset_session(db: Session, chat_id: int) -> Optional[models.ChatSessionState
         db.refresh(db_session)
         return db_session
     return None
+
+
+def set_active_prompt_key_for_session(db: Session, chat_id: int, prompt_key: str) -> Optional[models.ChatSessionState]:
+    """
+    Updates only the active_prompt_key for a specific chat session.
+    """
+    db_session = get_session(db, chat_id)
+    if db_session:
+        logger.info(f"Updating active prompt for chat_id {chat_id} to '{prompt_key}'")
+        db_session.active_prompt_key = prompt_key
+        db.commit()
+        db.refresh(db_session)
+        return db_session
+    else:
+        logger.warning(f"Attempted to set prompt key for a non-existent session for chat_id: {chat_id}")
+        # If the session doesn't exist, we might want to create it first.
+        # For now, we'll just return None as the handlers should ensure session exists.
+        return None

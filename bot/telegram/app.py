@@ -6,23 +6,26 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
-    filters,
+    filters, ConversationHandler,
 )
 
 # Import our settings and logger
 from bot.core.config import settings
 from bot.core.logging import logger
 
-# Import our database initializer and session factory
 from bot.database import SessionLocal, init_db
 
-# Import our custom services
 from bot.services.gemini_service import GeminiService
 from bot.services.prompt_service import PromptService
 from bot.services.chat_service import ChatService
 
-# Import our handler modules
-from bot.telegram.handlers import commands, messages, callbacks, conversations
+from .handlers import commands, messages, callbacks
+from .handlers.conversations import ( # <--- 2. 导入我们新的对话处理函数和状态
+    add_prompt_start,
+    received_prompt_text,
+    cancel_conversation,
+    AWAITING_PROMPT_TEXT
+)
 
 
 
@@ -63,9 +66,7 @@ async def post_init(application: Application) -> None:
 
 
 def run() -> None:
-    """
-    Builds the application and runs the bot.
-    """
+    """Initializes and runs the Telegram bot."""
     logger.info("Building and configuring the bot application...")
 
     # Create the Application instance
@@ -75,24 +76,41 @@ def run() -> None:
         .post_init(post_init)  # Register our setup function
         .build()
     )
+    add_prompt_conv_handler = ConversationHandler(
+        entry_points=[
+            # 对话的入口是点击 "＋ Add New" 按钮
+            CallbackQueryHandler(add_prompt_start, pattern="^add_new_prompt$")
+        ],
+        states={
+            # 定义不同状态下应该由哪个函数处理
+            AWAITING_PROMPT_TEXT: [
+                # 当用户发送任何文本消息时（不包括命令），由 received_prompt_text 处理
+                MessageHandler(filters.TEXT & ~filters.COMMAND, received_prompt_text)
+            ],
+        },
+        fallbacks=[
+            # 定义后备/取消方案
+            CommandHandler("cancel", cancel_conversation)
+        ],
+        # 可选：如果对话长时间没有响应，可以自动超时
+        conversation_timeout=300  # 5分钟
+    )
 
-    # --- Register all handlers ---
+    # --- 4. 注册 Handlers 到 Application ---
+    # 注意：ConversationHandler 应该在其他可能冲突的 handler 之前注册
+    application.add_handler(add_prompt_conv_handler)
 
-    # The ConversationHandler for adding prompts must be added before other handlers
-    # that might handle the same updates (like generic message handlers).
-    application.add_handler(conversations.add_prompt_conv_handler)
-
-    # Command Handlers
+    # 注册其他常规 Handlers
     application.add_handler(CommandHandler("start", commands.start))
-    application.add_handler(CommandHandler("help", commands.help_command))
-    application.add_handler(CommandHandler("clear", commands.clear_command))
     application.add_handler(CommandHandler("my_prompts", commands.my_prompts_command))
+    application.add_handler(CommandHandler("clear", commands.clear_command))
+    application.add_handler(CommandHandler("help", commands.help_command))
 
-    # Message Handler (for general text messages)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, messages.handle_message))
-
-    # Callback Query Handler (for button clicks)
+    # CallbackQueryHandler 现在处理除 add_new_prompt 之外的所有回调
     application.add_handler(CallbackQueryHandler(callbacks.handle_callback_query))
+
+    # MessageHandler 应该在最后，作为默认处理器
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, messages.handle_message))
 
     logger.info("All handlers registered.")
 
