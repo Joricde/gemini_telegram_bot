@@ -1,66 +1,59 @@
+# bot/database/crud/prompt_crud.py
 from sqlalchemy.orm import Session
 from typing import List, Optional
+
 from .. import models
+from ...core.logging import logger
 
-def create_user_prompt(db: Session, user_id: int, name: str, instruction: str) -> models.Prompt:
-    """
-    Creates a new private prompt for a user.
-    """
-    new_prompt = models.Prompt(
-        user_id=user_id,
-        name=name,
-        instruction=instruction,
-        prompt_type=models.PromptType.PRIVATE
-    )
-    db.add(new_prompt)
+def create_user_prompt(db: Session, user_id: int, title: str, text: str) -> models.Prompt:
+    """Creates a new prompt, associating it with the user who created it."""
+    logger.info(f"User (ID: {user_id}) creating new prompt with title: '{title}'")
+    db_prompt = models.Prompt(user_id=user_id, title=title, prompt_text=text)
+    db.add(db_prompt)
     db.commit()
-    db.refresh(new_prompt)
-    return new_prompt
+    db.refresh(db_prompt)
+    return db_prompt
 
-def get_user_prompts(db: Session, user_id: int) -> List[models.Prompt]:
-    """
-    Retrieves all private prompts for a specific user.
-    """
-    return db.query(models.Prompt).filter(
-        models.Prompt.user_id == user_id,
-        models.Prompt.prompt_type == models.PromptType.PRIVATE
-    ).all()
+def get_all_db_prompts(db: Session) -> List[models.Prompt]:
+    """Retrieves all prompts from the database, as they are all shared."""
+    return db.query(models.Prompt).all()
 
-def get_system_prompts(db: Session) -> List[models.Prompt]:
-    """
-    Retrieves all system-level prompts.
-    """
-    return db.query(models.Prompt).filter(models.Prompt.prompt_type == models.PromptType.SYSTEM).all()
+def get_db_prompt_by_id(db: Session, prompt_id: int) -> Optional[models.Prompt]:
+    """Retrieves a single prompt by its primary key ID."""
+    return db.query(models.Prompt).filter(models.Prompt.id == prompt_id).first()
 
-def get_prompt_by_id_and_user(db: Session, prompt_id: int, user_id: int) -> Optional[models.Prompt]:
-    """
-    Retrieves a specific prompt by its ID, ensuring it belongs to the user.
-    """
-    return db.query(models.Prompt).filter(
-        models.Prompt.id == prompt_id,
-        models.Prompt.user_id == user_id
-    ).first()
+def set_active_prompt_for_user(db: Session, user_id: int, prompt_id: int) -> Optional[models.Prompt]:
+    """Sets a specific prompt as active for a user, deactivating all others."""
+    # This function's logic remains the same, as the "active" status is per-user.
+    try:
+        db.query(models.Prompt).filter(
+            models.Prompt.user_id == user_id,
+            models.Prompt.is_active == True
+        ).update({"is_active": False}, synchronize_session=False)
 
-def delete_prompt_by_id_and_user(db: Session, prompt_id: int, user_id: int) -> bool:
+        db_prompt = db.query(models.Prompt).filter(models.Prompt.id == prompt_id, models.Prompt.user_id == user_id).first()
+        if db_prompt:
+            db_prompt.is_active = True
+            db.commit()
+            logger.info(f"User (ID: {user_id}) activated prompt (ID: {prompt_id})")
+            return db_prompt
+        else:
+            db.rollback()
+            return None
+    except Exception as e:
+        logger.error(f"Error setting active prompt: {e}")
+        db.rollback()
+        return None
+
+def delete_prompt(db: Session, user_id: int, prompt_id: int) -> bool:
     """
-    Deletes a prompt by its ID, ensuring it belongs to the user.
-    Returns True if deletion was successful, False otherwise.
+    Deletes a prompt. In our shared model, any user can delete any prompt.
+    We still take user_id for logging purposes.
     """
-    prompt_to_delete = get_prompt_by_id_and_user(db, prompt_id, user_id)
-    if prompt_to_delete:
-        db.delete(prompt_to_delete)
+    db_prompt = db.query(models.Prompt).filter(models.Prompt.id == prompt_id).first()
+    if db_prompt:
+        db.delete(db_prompt)
         db.commit()
+        logger.info(f"User (ID: {user_id}) deleted prompt (ID: {prompt_id})")
         return True
     return False
-
-def update_prompt_instruction(db: Session, prompt_id: int, user_id: int, new_instruction: str) -> Optional[models.Prompt]:
-    """
-    Updates the instruction of a specific prompt, ensuring it belongs to the user.
-    """
-    prompt_to_update = get_prompt_by_id_and_user(db, prompt_id, user_id)
-    if prompt_to_update:
-        prompt_to_update.instruction = new_instruction
-        db.commit()
-        db.refresh(prompt_to_update)
-        return prompt_to_update
-    return None

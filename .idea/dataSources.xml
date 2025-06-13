@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
-    <data-source source="LOCAL" name="bot" uuid="59a753db-e851-45c1-8a03-421a1e4acd40">
+    <data-source source="LOCAL" name="bot_database" uuid="85c3a5f1-944b-4106-8d99-e0725421bbe5">
       <driver-ref>sqlite.xerial</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
-      <jdbc-url>jdbc:sqlite:C:\Users\YOU\PycharmProjects\gemini_telegram_bot\data\bot.db</jdbc-url>
+      <jdbc-url>jdbc:sqlite:C:\Users\YOU\PycharmProjects\gemini_telegram_bot\data\bot_database.db</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
       <libraries>
         <library>
