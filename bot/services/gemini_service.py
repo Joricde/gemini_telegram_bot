@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 from google import genai
 from google.genai import types as genai_types
 from google.genai.types import HarmCategory
-from google.generativeai.types import HarmBlockThreshold
+# from google.generativeai.types import HarmBlockThreshold
 
 from bot.core.config import settings
 from bot.core.logging import logger
